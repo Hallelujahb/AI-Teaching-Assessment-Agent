@@ -108,3 +108,48 @@ CREATE UNIQUE INDEX IF NOT EXISTS one_account_per_student ON users (student_id) 
 -- Ids are issued by the system: students get ST001, ST002 ... in student_id; lecturers get LT001 ... in staff_id.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_id TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS one_account_per_staff ON users (staff_id) WHERE staff_id IS NOT NULL;
+
+-- Classes: a lecturer groups students so an exam can be assigned to the whole group at once.
+CREATE TABLE IF NOT EXISTS classes (
+  id SERIAL PRIMARY KEY,
+  owner_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 60),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS one_class_name_per_owner ON classes (owner_id, lower(name));
+CREATE TABLE IF NOT EXISTS class_members (
+  class_id INT NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (class_id, user_id)
+);
+
+-- An assignment gives one assessment to a fixed set of students. It owns a submission batch, so the
+-- answers students type land in the same tables the grading flow already reads.
+CREATE TABLE IF NOT EXISTS assignments (
+  id SERIAL PRIMARY KEY,
+  assessment_id INT NOT NULL REFERENCES assessments(id) ON DELETE CASCADE,
+  batch_id INT NOT NULL UNIQUE REFERENCES submission_batches(id) ON DELETE CASCADE,
+  class_id INT REFERENCES classes(id) ON DELETE SET NULL,
+  assigned_by INT REFERENCES users(id) ON DELETE SET NULL,
+  time_limit_minutes INT CHECK (time_limit_minutes BETWEEN 1 AND 300),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS assignment_students (
+  assignment_id INT NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+  user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  started_at TIMESTAMPTZ,
+  PRIMARY KEY (assignment_id, user_id)
+);
+
+-- Forgotten passwords. No email service is used: staff issue a one-time code (stored hashed).
+CREATE TABLE IF NOT EXISTS password_resets (
+  id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash TEXT,
+  issued_by INT REFERENCES users(id) ON DELETE SET NULL,
+  requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ,
+  attempts INT NOT NULL DEFAULT 0,
+  used_at TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS one_open_reset_per_user ON password_resets (user_id) WHERE used_at IS NULL;

@@ -1,7 +1,7 @@
 """Assessments: list, read, create, edit and delete (question, reference answer and rubric),
 plus the list of registered students for the answers form.
 
-An assessment is locked once any batch has been graded, because past runs and results refer to its rubric.
+An assessment is locked once any batch has been graded or it has been assigned to students, because past runs and results refer to its rubric.
 
 Owner: P2
 """
@@ -13,14 +13,17 @@ from ..errors import Conflict, NotFound, Unprocessable
 from ..limits import limiter
 
 router = APIRouter()
+MIN_CRITERIA = 3
 MAX_CRITERIA = 8
+MAX_CRITERION_SCORE = 1000   # sanity ceiling only; the lecturer picks the real value
 
 LIST_SQL = """
 SELECT a.id, a.title, a.question,
   (SELECT count(*) FROM rubric_criteria c WHERE c.assessment_id=a.id)::int AS criteria_count,
   (SELECT coalesce(sum(c.max_score),0) FROM rubric_criteria c WHERE c.assessment_id=a.id)::int AS max_total,
   (SELECT count(*) FROM submission_batches b WHERE b.assessment_id=a.id)::int AS batch_count,
-  EXISTS (SELECT 1 FROM grading_runs g JOIN submission_batches b ON b.id=g.batch_id WHERE b.assessment_id=a.id) AS locked
+  (EXISTS (SELECT 1 FROM grading_runs g JOIN submission_batches b ON b.id=g.batch_id WHERE b.assessment_id=a.id)
+   OR EXISTS (SELECT 1 FROM assignments x WHERE x.assessment_id=a.id)) AS locked
 FROM assessments a ORDER BY a.id
 """
 
@@ -47,8 +50,8 @@ def _clean(body: dict) -> dict:
     if not reference or len(reference) > 2000:
         errors["reference_answer"] = "Enter a reference answer (up to 2000 characters)"
     rubric = body.get("rubric")
-    if not isinstance(rubric, list) or not 1 <= len(rubric) <= MAX_CRITERIA:
-        errors["rubric"] = f"Add between 1 and {MAX_CRITERIA} criteria"
+    if not isinstance(rubric, list) or not MIN_CRITERIA <= len(rubric) <= MAX_CRITERIA:
+        errors["rubric"] = f"Add at least {MIN_CRITERIA} criteria (up to {MAX_CRITERIA})"
     else:
         for i, c in enumerate(rubric):
             c = c if isinstance(c, dict) else {}
@@ -57,19 +60,18 @@ def _clean(body: dict) -> dict:
                 errors[f"rubric[{i}].name"] = "Name the criterion (up to 80 characters)"
             if not desc or len(desc) > 600:
                 errors[f"rubric[{i}].description"] = "Describe what earns marks (up to 600 characters)"
-            if mx is None or not 1 <= mx <= 20:
-                errors[f"rubric[{i}].max_score"] = "Use a whole number from 1 to 20"
+            if mx is None or not 1 <= mx <= MAX_CRITERION_SCORE:
+                errors[f"rubric[{i}].max_score"] = f"Use a whole number from 1 to {MAX_CRITERION_SCORE}"
             rows.append((i + 1, name, desc, mx))
-        if not errors and sum(r[3] for r in rows) > 100:
-            errors["rubric"] = "The total marks cannot be more than 100"
     if errors:
         raise Unprocessable("Please fix the highlighted fields.", errors)
     return {"title": title, "question": question, "reference": reference, "rows": rows}
 
 
 def _locked(conn, aid: int) -> bool:
-    return bool(conn.execute(
-        "SELECT 1 FROM grading_runs g JOIN submission_batches b ON b.id=g.batch_id WHERE b.assessment_id=%s LIMIT 1", (aid,)).fetchone())
+    return conn.execute(
+        "SELECT EXISTS (SELECT 1 FROM grading_runs g JOIN submission_batches b ON b.id=g.batch_id WHERE b.assessment_id=%s) "
+        "OR EXISTS (SELECT 1 FROM assignments WHERE assessment_id=%s) AS locked", (aid, aid)).fetchone()["locked"]
 
 
 def _save_rubric(conn, aid: int, rows: list) -> None:
@@ -113,7 +115,7 @@ def update_assessment(request: Request, assessment_id: int, body: dict = Body(..
         if not conn.execute("SELECT 1 FROM assessments WHERE id=%s", (assessment_id,)).fetchone():
             raise NotFound("Assessment not found.")
         if _locked(conn, assessment_id):
-            raise Conflict("This assessment has been graded, so its question and rubric are locked.")
+            raise Conflict("This assessment has been graded or assigned, so its question and rubric are locked.")
         if conn.execute("SELECT 1 FROM assessments WHERE lower(title)=lower(%s) AND id<>%s", (d["title"], assessment_id)).fetchone():
             raise Conflict("An assessment with this title already exists.", {"title": "Already used"})
         conn.execute("UPDATE assessments SET title=%s, question=%s, reference_answer=%s WHERE id=%s",
@@ -129,13 +131,19 @@ def delete_assessment(assessment_id: int):
         if not conn.execute("SELECT 1 FROM assessments WHERE id=%s", (assessment_id,)).fetchone():
             raise NotFound("Assessment not found.")
         if _locked(conn, assessment_id):
-            raise Conflict("This assessment has been graded, so it cannot be deleted.")
+            raise Conflict("This assessment has been graded or assigned, so it cannot be deleted. Remove its assignments first.")
         conn.execute("DELETE FROM assessments WHERE id=%s", (assessment_id,))
     return {"deleted": assessment_id}
 
 
 @router.get("/api/students")
-def list_students():
+def list_students(q: str = "", limit: int = 200):
+    """Active students. ?q= searches id and name."""
+    q = q.strip()
+    like = f"%{q}%"
+    limit = max(1, min(limit, 1000))
     with get_conn() as conn:
-        return conn.execute("SELECT student_id, name FROM users WHERE role='student' AND status='active' "
-                            "AND student_id IS NOT NULL ORDER BY student_id").fetchall()
+        return conn.execute(
+            "SELECT student_id, name, email FROM users WHERE role='student' AND status='active' "
+            "AND student_id IS NOT NULL AND (%s::text = '' OR student_id ILIKE %s OR name ILIKE %s) "
+            "ORDER BY student_id LIMIT %s", (q, like, like, limit)).fetchall()

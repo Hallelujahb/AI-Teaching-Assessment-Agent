@@ -351,7 +351,7 @@ def _execute_tool(run_id, call, aid, bid, ctx, _tools, _scoring) -> str:
 # ---------------------------------------------------------------- grading calls
 
 
-def _grading_call(run_id, label, assessment, answers, deadline, _provider, problems=None) -> dict | None:
+def _grading_call_one(run_id, label, assessment, answers, deadline, _provider, problems=None) -> dict | None:
     """One model call that grades the given students. Returns the parsed JSON dict, or None."""
     started = time.perf_counter()
     messages = [{"role": "system", "content": prompts.GRADING_SYSTEM},
@@ -376,3 +376,27 @@ def _log_step(run_id, name, arguments, outcome, started) -> None:
                 (run_id, name, Json(arguments), str(outcome)[:300], int((time.perf_counter() - started) * 1000)))
     except Exception:  # noqa: BLE001
         log.warning("Could not write tool log for %s", name)
+
+
+GRADE_CHUNK = 10
+
+
+def _grading_call(run_id, label, assessment, answers, deadline, _provider, problems=None) -> dict | None:
+    """Grade in chunks of GRADE_CHUNK so a big class never overflows one model call."""
+    if len(answers) <= GRADE_CHUNK:
+        return _grading_call_one(run_id, label, assessment, answers, deadline, _provider, problems)
+    results, parsed = [], False
+    for i in range(0, len(answers), GRADE_CHUNK):
+        chunk = answers[i:i + GRADE_CHUNK]
+        ids = {a["student_id"] for a in chunk}
+        part = {k: v for k, v in (problems or {}).items() if k in ids} or None
+        out = _grading_call_one(run_id, f"{label} {i // GRADE_CHUNK + 1}", assessment, chunk,
+                                time.monotonic() + 45, _provider, part)
+        if out is None:
+            continue
+        parsed = True
+        if out.get("status") == "needs_clarification":
+            return out
+        if out.get("status") == "graded" and isinstance(out.get("results"), list):
+            results.extend(out["results"])
+    return {"status": "graded", "clarification": None, "results": results} if parsed else None

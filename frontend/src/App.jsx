@@ -4,6 +4,7 @@ import { api, hasToken, onUnauthorized, setToken } from "./api/client.js";
 import Logo from "./components/Logo.jsx";
 import Icon from "./components/Icon.jsx";
 import AuthPage from "./pages/AuthPage.jsx";
+import Login from "./pages/Login.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import AssessmentsPage from "./pages/AssessmentsPage.jsx";
 import SelectPage from "./pages/SelectPage.jsx";
@@ -14,11 +15,13 @@ import ResultsPage from "./pages/ResultsPage.jsx";
 import ApprovalsPage from "./pages/ApprovalsPage.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
 import StudentDashboard from "./pages/StudentDashboard.jsx";
+import StudentExams from "./pages/StudentExams.jsx";
+import ClassesPage from "./pages/ClassesPage.jsx";
 import { initials } from "./util.js";
 
 const ROLE = { superadmin: "Super admin", lecturer: "Lecturer", student: "Student" };
 const NAV = [
-  ["dashboard", "Dashboard", "dashboard"], ["assessments", "Assessments", "assess"], ["grade", "Grade a batch", "grade"],
+  ["dashboard", "Dashboard", "dashboard"], ["assessments", "Assessments", "assess"], ["classes", "Classes", "classes"], ["grade", "Grade a batch", "grade"],
   ["runs", "AI runs", "runs"], ["results", "Saved results", "results"], ["approvals", "Approvals", "approvals"], ["users", "Users", "users"],
 ];
 
@@ -28,6 +31,7 @@ export default function App() {
   const [theme, setTheme] = useState(document.documentElement.dataset.theme || "light");
   const [page, setPage] = useState("dashboard");
   const [flow, setFlow] = useState({ step: "select" });
+  const [authView, setAuthView] = useState("login");
   const [batch, setBatch] = useState(null);
   const [pending, setPending] = useState(0);
   const [menu, setMenu] = useState(false);
@@ -39,15 +43,18 @@ export default function App() {
     onUnauthorized(signOut);
     if (hasToken()) api.me().then(setUser).catch(signOut).finally(() => setChecking(false));
   }, []);
-  useEffect(() => { if (user && user.role !== "student") api.approvals().then((l) => setPending(l.length)).catch(() => {}); }, [user, page]);
+  useEffect(() => { if (user && user.role !== "student") Promise.all([api.approvals(), api.resets()]).then(([a, r]) => setPending(a.length + r.length)).catch(() => {}); }, [user, page]);
 
   const go = (p, extra = {}) => { setPage(p); setFlow(extra.flow || { step: "select" }); setBatch(extra.batch ?? null); setMenu(false); window.scrollTo(0, 0); };
 
   if (checking) return null;
-  if (!user) return <AuthPage theme={theme} setTheme={setTheme} onLogin={(u) => { setUser(u); setPage(u.role === "student" ? "mine" : "dashboard"); }} />;
+  if (!user) {
+    if (authView === "login") return <Login onLogin={(data) => { setToken(data.token); setUser(data.user); setPage(data.user.role === "student" ? "exams" : "dashboard"); }} onRegister={() => setAuthView("auth")} onForgot={() => setAuthView("auth")} />;
+    return <AuthPage theme={theme} setTheme={setTheme} onLogin={(u) => { setUser(u); setPage(u.role === "student" ? "exams" : "dashboard"); setAuthView("login"); }} />;
+  }
 
   const student = user.role === "student";
-  const nav = student ? [["mine", "My results", "mine"]] : NAV.filter(([id]) => id !== "users" || user.role === "superadmin");
+  const nav = student ? [["exams", "My exams", "assess"], ["mine", "My results", "mine"]] : NAV.filter(([id]) => id !== "users" || user.role === "superadmin");
   const title = (nav.find(([id]) => id === page) || [0, ""])[1];
   const code = user.student_id || user.staff_id;
   const startRun = (params) => go("grade", { flow: { step: "run", params } });
@@ -80,7 +87,9 @@ export default function App() {
           <span className="crumb">{title}</span>
         </header>
         <main>
+          {page === "exams" && <StudentExams />}
           {page === "mine" && <StudentDashboard />}
+          {page === "classes" && <ClassesPage />}
           {page === "dashboard" && <DashboardPage user={user} onGo={go} onGrade={startRun}
             onReview={(runId) => go("grade", { flow: { step: "review", runId } })} onResults={(id) => go("results", { batch: id })} />}
           {page === "assessments" && <AssessmentsPage onGrade={startRun} />}

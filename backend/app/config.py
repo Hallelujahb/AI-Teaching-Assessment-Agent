@@ -77,3 +77,9 @@ def agent_timeout_seconds() -> int:
         return max(10, int(os.environ.get("AGENT_TIMEOUT_SECONDS", AGENT_TIMEOUT_SECONDS)))
     except ValueError:
         return AGENT_TIMEOUT_SECONDS
+
+# ---- classes, exams and password resets ----
+MAX_CLASS_NAME_CHARS = 60
+MAX_TIME_LIMIT_MINUTES = 300
+RESET_CODE_MINUTES = 30
+RESET_MAX_ATTEMPTS = 5

@@ -244,7 +244,7 @@ class StubProvider:
 def get_provider():
     """Return the configured provider object.
 
-    'stub' -> StubProvider. 'openrouter' -> _OpenRouterProvider().
+    'stub' -> StubProvider. 'openrouter' -> _OpenRouterProvider(). 'nvidia' -> _NVIDIAProvider().
     """
     if config.force_ai_failure():
         raise AIError("quota")
@@ -253,6 +253,8 @@ def get_provider():
         return StubProvider([{"status": "graded", "results": []}])
     if provider == "openrouter":
         return _OpenRouterProvider()
+    if provider == "nvidia":
+        return _NVIDIAProvider()
     raise AIError("unavailable", message=f"Unknown AI_PROVIDER: {provider!r}")
 
 
@@ -288,6 +290,48 @@ class _OpenRouterProvider:
         from openai import OpenAI
         client = OpenAI(base_url=os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
                         api_key=os.environ.get("OPENROUTER_API_KEY"), timeout=timeout, max_retries=0)
+        try:
+            response = client.chat.completions.create(**kwargs)
+        except AIError:
+            raise
+        except Exception as exc:
+            raise map_error(exc) from None
+        return _parse_response(response, model=self.model)
+
+
+class _NVIDIAProvider:
+    """NVIDIA NIM provider - uses AI_BASE_URL, AI_API_KEY, AI_MODEL from env.
+
+    Works with NVIDIA NIM endpoints (https://integrate.api.nvidia.com/v1 or self-hosted).
+    Supports tool calling and JSON mode.
+    """
+
+    def __init__(self):
+        api_key = os.environ.get("AI_API_KEY", "")
+        self.model = os.environ.get("AI_MODEL", "")
+        base_url = os.environ.get("AI_BASE_URL", "https://integrate.api.nvidia.com/v1")
+        if not api_key or not self.model:
+            raise AIError("unavailable", message="not configured")
+        self.base_url = base_url
+
+    def generate(self, messages, tools=None, schema=None, deadline=None) -> ProviderReply:
+        if config.force_ai_failure():
+            raise AIError("quota")
+        timeout = 45.0
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining < 2:
+                raise AIError("timeout")
+            timeout = min(timeout, remaining)
+
+        kwargs: dict[str, Any] = {"model": self.model, "messages": messages, "temperature": 0}
+        if tools:
+            kwargs["tools"] = tools
+        if schema:
+            kwargs["response_format"] = {"type": "json_object"}
+
+        from openai import OpenAI
+        client = OpenAI(base_url=self.base_url, api_key=os.environ.get("AI_API_KEY"), timeout=timeout, max_retries=0)
         try:
             response = client.chat.completions.create(**kwargs)
         except AIError:

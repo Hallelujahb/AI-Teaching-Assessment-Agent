@@ -1,0 +1,18 @@
+.sp { position: relative; font-size: 13px; }
+.sp-head { display: flex; justify-content: space-between; margin-bottom: 8px; color: var(--lg-muted, #64748b); }
+.sp-clear { border: 0; background: none; color: var(--lg-link, #2354b8); font-weight: 600; cursor: pointer; }
+.sp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; max-height: 140px; overflow: auto; }
+.sp-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 999px;
+  background: var(--lg-seg, #e8effb); color: var(--lg-seg-on-ink, #2354b8); font-weight: 600; }
+.sp-chip button { border: 0; background: transparent; color: inherit; font-size: 15px; line-height: 1; cursor: pointer; }
+.sp-input { width: 100%; height: 40px; padding: 0 14px; border-radius: 12px; font: inherit; box-sizing: border-box;
+  border: 1px solid var(--lg-border, #d8e2ef); background: var(--lg-field, #fff); color: var(--lg-ink, #0f172a); outline: 0; }
+.sp-input:focus { border-color: var(--lg-btn, #2354b8); box-shadow: 0 0 0 3px rgba(59,111,224,.18); }
+.sp-list { position: absolute; z-index: 20; left: 0; right: 0; top: 100%; margin-top: 6px; max-height: 260px; overflow: auto;
+  border: 1px solid var(--lg-border, #d8e2ef); border-radius: 12px; background: var(--lg-field, #fff);
+  box-shadow: 0 8px 24px rgba(0,0,0,.15); }
+.sp-note { padding: 12px 14px; color: var(--lg-muted, #64748b); }
+.sp-all, .sp-row { display: flex; gap: 10px; align-items: baseline; width: 100%; padding: 9px 14px; border: 0; background: none;
+  text-align: left; font: inherit; color: var(--lg-ink, #0f172a); cursor: pointer; }
+.sp-all { font-weight: 700; color: var(--lg-link, #2354b8); border-bottom: 1px solid var(--lg-border, #d8e2ef); }
+.sp-row:hover, .sp-all:hover { background: var(--lg-seg, #e8effb); }
