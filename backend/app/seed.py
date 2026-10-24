@@ -2,8 +2,10 @@
     python -m app.seed            add demo data only if missing (safe to run twice)
     python -m app.seed --reset    wipe runs, proposals, results and added batches, then reseed
 Loads every seed/assessments/*.json that has a rubric (placeholders are skipped).
+Assessments are matched by title; the database assigns integer ids (SERIAL).
+--reset restarts ids, so JS101 is always id 1 and its first batch is id 1.
 Reads DATABASE_URL from the environment or backend/.env. Command line only.
-Owner: P5. Matches schema.sql (assessments.id is text, e.g. "JS101").
+Owner: P5. Matches schema.sql.
 """
 import json
 import os
@@ -17,9 +19,6 @@ load_dotenv()
 
 SEED_DIR = Path(__file__).resolve().parents[2] / "seed" / "assessments"
 MAX_ANSWER, MAX_BATCH = 2000, 10
-# Child tables first so foreign keys never block the delete.
-RESET_ORDER = ["reviewed_results", "ai_proposals", "tool_logs", "grading_runs",
-               "submissions", "submission_batches", "rubric_criteria", "assessments"]
 
 
 def load_and_check() -> list:
@@ -33,7 +32,7 @@ def load_and_check() -> list:
     assert items, f"no usable seed files in {SEED_DIR}"
     for a in items:
         t, r = a.get("title", "?"), a["rubric"]
-        assert a.get("id", "").strip(), f"{t}: id is required (text, e.g. JS101)"
+        assert a.get("title", "").strip(), "title is required"
         assert len(r) == 3, f"{t}: guide requires a three-criterion rubric"
         assert [c["position"] for c in r] == [1, 2, 3], f"{t}: bad positions"
         assert all(c["max_score"] > 0 for c in r), f"{t}: max_score must be > 0"
@@ -48,11 +47,14 @@ def load_and_check() -> list:
 def ensure(cur, items: list) -> dict:
     n = {"assessments": 0, "batches": 0, "submissions": 0}
     for a in items:
-        aid = a["id"]
-        cur.execute("SELECT 1 FROM assessments WHERE id=%s", (aid,))
-        if not cur.fetchone():
-            cur.execute("INSERT INTO assessments (id, title, question, reference_answer) VALUES (%s,%s,%s,%s)",
-                        (aid, a["title"], a["question"], a["reference_answer"]))
+        cur.execute("SELECT id FROM assessments WHERE title=%s", (a["title"],))
+        row = cur.fetchone()
+        if row:
+            aid = row[0]
+        else:
+            cur.execute("INSERT INTO assessments (title, question, reference_answer) VALUES (%s,%s,%s) RETURNING id",
+                        (a["title"], a["question"], a["reference_answer"]))
+            aid = cur.fetchone()[0]
             n["assessments"] += 1
             for c in a["rubric"]:
                 cur.execute("INSERT INTO rubric_criteria (assessment_id, position, name, description, max_score) VALUES (%s,%s,%s,%s,%s)",
@@ -80,8 +82,8 @@ def main() -> None:
     items = load_and_check()
     with psycopg.connect(url) as conn, conn.cursor() as cur:  # one transaction
         if "--reset" in sys.argv[1:]:
-            for table in RESET_ORDER:
-                cur.execute(f"DELETE FROM {table}")  # fixed names above
+            cur.execute("TRUNCATE reviewed_results, ai_proposals, tool_logs, grading_runs, submissions, "
+                        "submission_batches, rubric_criteria, assessments RESTART IDENTITY CASCADE")
             print("Reset: demo data, runs, proposals and results wiped.")
         print("Seed done. Added:", ensure(cur, items))
 
