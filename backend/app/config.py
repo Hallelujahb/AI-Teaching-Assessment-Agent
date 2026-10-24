@@ -50,3 +50,30 @@ def force_ai_failure() -> bool:
 def ai_configured() -> bool:
     return all(os.environ.get(k, "").strip() and "replace" not in os.environ.get(k, "").lower()
                for k in ("AI_BASE_URL", "AI_API_KEY", "AI_MODEL"))
+
+
+# ---- AI settings (appended by P3) ----
+# Per-run limits from plan section 4. The tool phase may use 4 model turns, the single
+# grading call is the 5th turn. The one allowed retry comes on top and only fixes invalid students.
+AGENT_MAX_TOOL_TURNS = 4
+AGENT_MAX_TOOL_CALLS = 4
+AGENT_TIMEOUT_SECONDS = 60
+
+
+def ai_base_url() -> str:
+    return os.environ.get("AI_BASE_URL", "").strip()
+
+
+def ai_api_key() -> str:
+    return os.environ.get("AI_API_KEY", "").strip()
+
+
+def ai_model() -> str:
+    return os.environ.get("AI_MODEL", "").strip()
+
+
+def agent_timeout_seconds() -> int:
+    try:
+        return max(10, int(os.environ.get("AGENT_TIMEOUT_SECONDS", AGENT_TIMEOUT_SECONDS)))
+    except ValueError:
+        return AGENT_TIMEOUT_SECONDS

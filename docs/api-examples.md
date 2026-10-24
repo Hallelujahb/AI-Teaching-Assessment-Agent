@@ -41,9 +41,9 @@ Request `{"request": "grade the JS101 batch", "assessment_id": "JS101", "batch_i
    "feedback": "...", "attention_flags": [], "proposed_total": 8, "proposed_percentage": 100.0},
   {"student_id": "ST003", "answer_status": "blank", "criteria": [], "feedback": "", "attention_flags": ["Blank answer"], "proposed_total": 0, "proposed_percentage": 0.0}]}
 ```
-200 clarification (P3 to confirm shape): `{"status": "needs_clarification", "run_id": "...", "clarification": "Which assessment and batch do you want graded?"}`
+200 clarification (shape confirmed by P3; `run_id` is null when the question comes before any run): `{"status": "needs_clarification", "run_id": "...", "clarification": "Which assessment and batch do you want graded?"}`
 429 request volume limit reached (guide: control request volume). 502/504 AI quota or timeout:
-`{"error": "The AI service is busy. Try again in a minute.", "kind": "quota", "run_id": "..."}` (`kind`: timeout, quota, invalid_output, tool_limit). The error keeps the request so the UI can offer a manual retry.
+`{"error": "The AI service is busy. Try again in a minute.", "kind": "quota", "run_id": "..."}` (`kind`: timeout, quota, invalid_output, tool_limit, unavailable). The error keeps the request so the UI can offer a manual retry.
 
 ## GET /api/runs/{run_id}
 200 `{"run_id": "...", "status": "succeeded", "model": "...", "proposals": [ ...as above... ], "tool_log": [{"tool_name": "get_assessment_criteria", "arguments": {"assessment_id": "JS101"}, "outcome": "ok", "duration_ms": 41, "created_at": "..."}]}`

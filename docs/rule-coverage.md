@@ -19,11 +19,24 @@ Run `cd backend && python -m pytest`. Rows marked DB need `TEST_DATABASE_URL` po
 | Confirm clicked twice | DB: `test_double_confirm_refused_and_nothing_added` |
 | Confirm committed but response lost (retry gets 409) | DB: same test as above (second call refused). The UI behaviour is Manual |
 | Database fails while saving proposals; DB unreachable | Manual (P2/P5) |
-| Turn or tool-call cap reached; timeout or 429; FORCE_AI_FAILURE | `test_failure_stub_raises_quota_error` covers the stub. The caps and test case 5 are Manual on the deployed app |
+| Turn or tool-call cap reached; timeout or 429; FORCE_AI_FAILURE | `test_agent.py`: `test_tool_call_cap_stops_the_run`, `test_turn_cap_stops_a_model_that_never_finishes`, `test_provider_errors_map_to_clear_kinds`, `test_force_ai_failure_gives_quota_error_with_no_network_and_no_tool_calls`. Test case 5 on the deployed app is still Manual |
 | Injection text inside an answer | `test_injection.py` (detection, obedient-model rejection, flagging, no false positives) |
 | Code marks fewer than 3 letters as unassessable, skips the model | `test_fewer_than_three_letters_is_unassessable`, `test_code_unassessable_gets_zeros_and_flag` |
 | Blank answers never sent to the model | `test_valid_batch_blank_is_not_expected`, `test_blank_student_never_graded_by_model_result_dropped` |
 | Totals and percentages | `test_st001_total_and_percentage`, `test_st002_total_and_percentage`, `test_percentage_rounds_half_up_to_one_decimal`, `test_lecturer_correction_recalculates_total` |
+
+## Agent rules (test_agent.py, no database or network)
+
+| Rule | Test |
+| --- | --- |
+| Model chooses the tools; every student gets a proposal in batch order | `test_model_chooses_tools_and_every_student_gets_a_proposal` |
+| Blank answers never reach the model; all-blank batch makes no model call | `test_blank_answer_never_reaches_the_model`, `test_all_blank_batch_makes_no_grading_call` |
+| One retry, for invalid students only, never more | `test_invalid_student_is_retried_once_for_that_student_only`, `test_still_invalid_after_retry_needs_manual_grading_and_never_retries_again` |
+| Obedient model rejected for an injected answer | `test_model_that_obeys_an_injected_answer_is_rejected` |
+| Unusable output twice gives invalid_output, run closed as failed | `test_unparseable_output_twice_is_an_invalid_output_error` |
+| Clarification from the model or from code, no guessing | `test_model_asking_a_question_returns_clarification_and_calls_no_tool`, `test_vague_request_gets_a_clarification_listing_the_options`, `test_assessment_without_rubric_asks_instead_of_guessing` |
+| Invented ids run nothing | `test_model_cannot_use_an_id_it_invented` |
+| Provider failure closes the run and carries the run id | `test_provider_failure_closes_the_run_and_carries_the_run_id` |
 
 ## Handoff notes
 

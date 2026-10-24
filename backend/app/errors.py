@@ -67,8 +67,9 @@ AI_MESSAGES = {
     "quota": "The AI service is busy or its free quota is used up. Your input is kept. Try again in a minute.",
     "invalid_output": "The AI returned an answer that could not be used. Your input is kept. Try again.",
     "tool_limit": "The agent used too many steps and was stopped. Your input is kept. Try again.",
+    "unavailable": "The AI service is not available right now (check the key and model settings). Your input is kept. Try again later.",
 }
-AI_STATUS = {"timeout": 504, "quota": 503, "invalid_output": 502, "tool_limit": 502}
+AI_STATUS = {"timeout": 504, "quota": 503, "invalid_output": 502, "tool_limit": 502, "unavailable": 503}
 
 
 class AIError(AppError):
