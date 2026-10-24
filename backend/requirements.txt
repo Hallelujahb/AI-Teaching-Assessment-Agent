@@ -7,3 +7,5 @@ slowapi
 python-dotenv
 pytest
 httpx
+
+psycopg-pool
