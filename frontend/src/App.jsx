@@ -5,6 +5,7 @@ import Logo from "./components/Logo.jsx";
 import Icon from "./components/Icon.jsx";
 import AuthPage from "./pages/AuthPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
+import AdminDashboard from "./pages/AdminDashboard.jsx";
 import AssessmentsPage from "./pages/AssessmentsPage.jsx";
 import SelectPage from "./pages/SelectPage.jsx";
 import RunPage from "./pages/RunPage.jsx";
@@ -19,9 +20,14 @@ import ClassesPage from "./pages/ClassesPage.jsx";
 import { initials } from "./util.js";
 
 const ROLE = { superadmin: "Super admin", lecturer: "Lecturer", student: "Student" };
-const NAV = [
+// Lecturers create assessments, run classes and grade. The super admin oversees: accounts, approvals, results and AI runs.
+const LECTURER_NAV = [
   ["dashboard", "Dashboard", "dashboard"], ["assessments", "Assessments", "assess"], ["classes", "Classes", "classes"], ["grade", "Grade a batch", "grade"],
-  ["runs", "AI runs", "runs"], ["results", "Saved results", "results"], ["approvals", "Approvals", "approvals"], ["users", "Users", "users"],
+  ["runs", "AI runs", "runs"], ["results", "Saved results", "results"], ["approvals", "Approvals", "approvals"],
+];
+const ADMIN_NAV = [
+  ["dashboard", "Dashboard", "dashboard"], ["users", "Users", "users"], ["approvals", "Approvals", "approvals"],
+  ["results", "Saved results", "results"], ["runs", "AI runs", "runs"],
 ];
 
 export default function App() {
@@ -49,7 +55,8 @@ export default function App() {
   if (!user) return <AuthPage theme={theme} setTheme={setTheme} onLogin={(u) => { setUser(u); setPage(u.role === "student" ? "exams" : "dashboard"); }} />;
 
   const student = user.role === "student";
-  const nav = student ? [["exams", "My exams", "assess"], ["mine", "My results", "mine"]] : NAV.filter(([id]) => id !== "users" || user.role === "superadmin");
+  const admin = user.role === "superadmin";
+  const nav = student ? [["exams", "My exams", "assess"], ["mine", "My results", "mine"]] : (user.role === "superadmin" ? ADMIN_NAV : LECTURER_NAV);
   const title = (nav.find(([id]) => id === page) || [0, ""])[1];
   const code = user.student_id || user.staff_id;
   const startRun = (params) => go("grade", { flow: { step: "run", params } });
@@ -84,17 +91,18 @@ export default function App() {
         <main>
           {page === "exams" && <StudentExams />}
           {page === "mine" && <StudentDashboard />}
-          {page === "classes" && <ClassesPage />}
-          {page === "dashboard" && <DashboardPage user={user} onGo={go} onGrade={startRun}
+          {page === "classes" && !admin && <ClassesPage />}
+          {page === "dashboard" && admin && <AdminDashboard user={user} onGo={go} />}
+          {page === "dashboard" && !admin && <DashboardPage user={user} onGo={go} onGrade={startRun}
             onReview={(runId) => go("grade", { flow: { step: "review", runId } })} onResults={(id) => go("results", { batch: id })} />}
-          {page === "assessments" && <AssessmentsPage onGrade={startRun} />}
-          {page === "grade" && flow.step === "select" && <SelectPage onStart={(params) => setFlow({ step: "run", params })} />}
-          {page === "grade" && flow.step === "run" && <RunPage params={flow.params} onBack={() => go("grade")} onDone={(runId) => setFlow({ step: "review", runId })} />}
-          {page === "grade" && flow.step === "review" && <ReviewPage runId={flow.runId} onBack={() => go("grade")} onConfirmed={() => go("results")} />}
-          {page === "runs" && <RunsPage onReview={(runId) => go("grade", { flow: { step: "review", runId } })} />}
+          {page === "assessments" && !admin && <AssessmentsPage onGrade={startRun} />}
+          {page === "grade" && !admin && flow.step === "select" && <SelectPage onStart={(params) => setFlow({ step: "run", params })} />}
+          {page === "grade" && !admin && flow.step === "run" && <RunPage params={flow.params} onBack={() => go("grade")} onDone={(runId) => setFlow({ step: "review", runId })} />}
+          {page === "grade" && !admin && flow.step === "review" && <ReviewPage runId={flow.runId} onBack={() => go("grade")} onConfirmed={() => go("results")} />}
+          {page === "runs" && <RunsPage onReview={admin ? null : (runId) => go("grade", { flow: { step: "review", runId } })} />}
           {page === "results" && <ResultsPage initial={batch} />}
           {page === "approvals" && <ApprovalsPage role={user.role} onChange={setPending} />}
-          {page === "users" && <AdminPage />}
+          {page === "users" && admin && <AdminPage />}
         </main>
       </div>
     </div>

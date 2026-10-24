@@ -6,11 +6,11 @@ Students reach only /api/me/* (their results and the exams assigned to them). On
 
 Owner: P2
 """
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import config
-from .auth import require
+from .auth import Forbidden, require
 from .errors import install_error_handlers
 from .limits import install_limits
 from .routes import (admin, approvals, assessments, assignments, auth, batches, classes, dashboard, exams, grading, health,
@@ -32,7 +32,19 @@ app.add_middleware(
 )
 
 staff = [Depends(require("lecturer", "superadmin"))]
-for module in (assessments, batches, grading, runs, review, results, dashboard, approvals, classes, assignments, resets):
+
+
+def lecturer_writes(request: Request, user: dict = Depends(require("lecturer", "superadmin"))) -> None:
+    """The super admin oversees: reading is allowed, changing assessments, answers, grading, classes is not."""
+    if user["role"] == "superadmin" and request.method not in ("GET", "HEAD", "OPTIONS"):
+        raise Forbidden("The super admin oversees the platform. Lecturers create assessments, grade and manage classes.")
+
+
+# Routes lecturers own (reads stay open to the super admin).
+for module in (assessments, batches, grading, review, classes, assignments):
+    app.include_router(module.router, dependencies=[Depends(lecturer_writes)])
+# Shared with the super admin: reading runs and results, approving sign-ups, issuing reset codes.
+for module in (runs, results, dashboard, approvals, resets):
     app.include_router(module.router, dependencies=staff)
 for module in (health, auth, me, exams, admin):
     app.include_router(module.router)

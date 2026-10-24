@@ -43,7 +43,7 @@ export default function RunsPage({ onReview }) {
                   <div key={i}><span className="t-name">{l.tool_name}</span> {JSON.stringify(l.arguments)} <span className="t-out">{l.outcome}</span> <span className="t-ms">{l.duration_ms} ms</span></div>
                 )) : <div>No steps were recorded.</div>}
               </div>
-              {run.status === "succeeded" && run.is_latest && <div><button className="btn primary" onClick={() => onReview(run.run_id)}>Open review</button></div>}
+              {onReview && run.status === "succeeded" && run.is_latest && <div><button className="btn primary" onClick={() => onReview(run.run_id)}>Open review</button></div>}
             </div>
           ) : <p className="muted">Choose a run to see its steps.</p>}
           <div className="panel stack ai">
