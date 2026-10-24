@@ -17,7 +17,7 @@ def list_pending(user: dict = Depends(staff)):
     only_students = "" if user["role"] == "superadmin" else " AND u.role='student'"
     with get_conn() as conn:
         return conn.execute(
-            "SELECT u.id, u.name, u.email, u.role, u.student_id, u.created_at, "
+            "SELECT u.id, u.name, u.email, u.role, u.student_id, u.staff_id, u.created_at, "
             "EXISTS (SELECT 1 FROM submissions s WHERE s.student_id=u.student_id) AS has_answers "
             f"FROM users u WHERE u.status='pending'{only_students} ORDER BY u.created_at").fetchall()
 

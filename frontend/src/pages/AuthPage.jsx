@@ -5,14 +5,14 @@ import Logo from "../components/Logo.jsx";
 import ErrorBanner from "../components/ErrorBanner.jsx";
 
 const HINT = {
-  student: "Your lecturer approves new student accounts before you can sign in.",
-  lecturer: "A super admin approves new lecturer accounts before you can sign in.",
+  student: "Your lecturer approves new student accounts. Your student id is issued for you.",
+  lecturer: "A super admin approves new lecturer accounts. Your staff id is issued for you.",
 };
 
 export default function AuthPage({ onLogin, theme, setTheme }) {
   const [role, setRole] = useState("student");
   const [mode, setMode] = useState("in");
-  const [f, setF] = useState({ name: "", email: "", password: "", student_id: "" });
+  const [f, setF] = useState({ name: "", email: "", password: "" });
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(null);
@@ -31,7 +31,7 @@ export default function AuthPage({ onLogin, theme, setTheme }) {
   return (
     <div className="auth">
       <div className="hero">
-        <Logo size={150} />
+        <Logo />
         <p>The AI proposes. The code validates. The lecturer decides.</p>
       </div>
       <div className="formside">
@@ -51,10 +51,6 @@ export default function AuthPage({ onLogin, theme, setTheme }) {
                 </div>
               )}
               {mode === "up" && <div><label htmlFor="nm">Full name</label><input id="nm" value={f.name} onChange={up("name")} required /></div>}
-              {mode === "up" && role === "student" && (
-                <div><label htmlFor="si">Student id</label><input id="si" value={f.student_id} onChange={up("student_id")} placeholder="ST001" required />
-                  <p className="muted small">The id printed on your answers.</p></div>
-              )}
               <div><label htmlFor="em">Email</label><input id="em" type="email" autoComplete="username" value={f.email} onChange={up("email")} required /></div>
               <div><label htmlFor="pw">Password</label><input id="pw" type="password" autoComplete={mode === "in" ? "current-password" : "new-password"} value={f.password} onChange={up("password")} required minLength={mode === "up" ? 8 : undefined} />
                 {mode === "up" && <p className="muted small">At least 8 characters.</p>}</div>

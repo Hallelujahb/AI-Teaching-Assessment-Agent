@@ -1,7 +1,8 @@
 """Sign-in, password hashing and role checks. Standard library only (no new packages).
 
-Token = base64(json{uid, exp}) + "." + HMAC-SHA256 signature. The role is read from the
-database on every request, so removing a user or changing a role takes effect at once.
+Token = base64(json{uid, exp}) + "." + HMAC-SHA256 signature. The user row is cached for a few
+seconds so a page that makes several calls does not hit the remote database for each one.
+A removed user or changed role therefore takes effect within CACHE_SECONDS.
 
 Owner: P2
 """
@@ -18,6 +19,8 @@ from .db import get_conn
 from .errors import AppError
 
 TOKEN_HOURS = 12
+CACHE_SECONDS = 15
+_cache: dict[int, tuple[float, dict]] = {}
 
 
 class Unauthorized(AppError):
@@ -71,7 +74,11 @@ def read_token(token: str) -> int | None:
 
 
 def public(user: dict) -> dict:
-    return {k: user.get(k) for k in ("id", "email", "name", "role", "student_id")}
+    return {k: user.get(k) for k in ("id", "email", "name", "role", "student_id", "staff_id")}
+
+
+def forget(uid: int | None = None) -> None:
+    _cache.pop(uid, None) if uid is not None else _cache.clear()
 
 
 def current_user(authorization: str | None = Header(default=None)) -> dict:
@@ -80,11 +87,16 @@ def current_user(authorization: str | None = Header(default=None)) -> dict:
     uid = read_token(authorization[7:].strip())
     if uid is None:
         raise Unauthorized("Your session has ended. Please sign in again.")
+    hit = _cache.get(uid)
+    if hit and time.time() - hit[0] < CACHE_SECONDS:
+        return dict(hit[1])
     with get_conn() as conn:
-        user = conn.execute("SELECT id, email, name, role, student_id, status FROM users WHERE id=%s", (uid,)).fetchone()
+        user = conn.execute("SELECT id, email, name, role, student_id, staff_id, status FROM users WHERE id=%s", (uid,)).fetchone()
     if not user or user.get("status") != "active":
-        raise Unauthorized("This account no longer exists.")
-    return user
+        _cache.pop(uid, None)
+        raise Unauthorized("This account is not active.")
+    _cache[uid] = (time.time(), user)
+    return dict(user)
 
 
 def require(*roles: str):

@@ -1,16 +1,22 @@
 // Owner: P1. Every server call goes through this file.
+// GET answers are kept for 30 seconds so moving between pages is instant; any change clears them.
 const base = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 let token = localStorage.getItem("qeleme_token") || "";
 let onExpired = () => {};
+const cache = new Map();
+const TTL = 30000;
 
 export const setToken = (t) => {
   token = t || "";
+  cache.clear();
   if (t) localStorage.setItem("qeleme_token", t); else localStorage.removeItem("qeleme_token");
 };
 export const hasToken = () => !!token;
 export const onUnauthorized = (fn) => { onExpired = fn; };
 
 async function request(path, options = {}) {
+  const isGet = !options.method || options.method === "GET";
+  if (isGet) { const hit = cache.get(path); if (hit && Date.now() - hit.t < TTL) return hit.v; }
   const res = await fetch(base + path, {
     ...options,
     headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) },
@@ -23,9 +29,11 @@ async function request(path, options = {}) {
     error.details = body;
     throw error;
   }
+  if (isGet) cache.set(path, { v: body, t: Date.now() }); else cache.clear();
   return body;
 }
-const post = (path, data = {}) => request(path, { method: "POST", body: JSON.stringify(data) });
+const send = (method) => (path, data = {}) => request(path, { method, body: JSON.stringify(data) });
+const post = send("POST");
 
 export const api = {
   health: () => request("/api/health"),
@@ -37,6 +45,11 @@ export const api = {
   approve: (id) => post(`/api/approvals/${id}/approve`),
   reject: (id) => post(`/api/approvals/${id}/reject`),
   assessments: () => request("/api/assessments"),
+  assessment: (id) => request(`/api/assessments/${id}`),
+  createAssessment: (data) => post("/api/assessments", data),
+  updateAssessment: (id, data) => send("PUT")(`/api/assessments/${id}`, data),
+  deleteAssessment: (id) => request(`/api/assessments/${id}`, { method: "DELETE" }),
+  students: () => request("/api/students"),
   batches: (id) => request(`/api/assessments/${id}/batches`),
   addBatch: (id, data) => post(`/api/assessments/${id}/batches`, data),
   grade: (data) => post("/api/agent/grade", data),
