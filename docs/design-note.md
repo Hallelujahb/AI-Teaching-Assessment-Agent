@@ -13,6 +13,9 @@ flowchart LR
   L -- confirms --> T3[save_reviewed_results] --> DB
 ```
 
+## Validation and scoring
+See `design-note-validation.md` (P4). Merge it here before submitting.
+
 ## Three tools
 `get_assessment_criteria`, `get_submissions` (retrieve), `save_reviewed_results` (save, after the lecturer confirms).
 

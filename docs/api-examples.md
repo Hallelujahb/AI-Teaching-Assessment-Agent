@@ -1,19 +1,19 @@
-# API examples (DRAFT for P2 to confirm by T+0:30)
+# API examples (P2 to confirm)
 
 Base: `{VITE_API_BASE_URL}`. All JSON. Errors are short messages, never stack traces:
 `{"error": "short message", "fields": {"field.path": "message"}}` (`fields` only on 422/409 where useful).
-IDs below are examples; confirm whether ids are integers or strings with P2.
+Ids follow schema.sql: assessment ids are text (e.g. "JS101"); batch and criterion ids are integers; run ids are UUIDs.
 
 ## GET /api/health
 200 `{"backend": "ok", "database": "ok", "ai": "configured"}`   (`ai` is `configured` or `not_configured`, never calls the model)
 
 ## GET /api/assessments
-200 `[{"id": 1, "title": "JS101: Variables in JavaScript"}, {"id": 2, "title": "PY101: Lists and tuples in Python"}]`
+200 `[{"id": "JS101", "title": "JS101: Variables in JavaScript"}]`
 
-## GET /api/assessments/1   (get_assessment_criteria)
+## GET /api/assessments/JS101   (get_assessment_criteria)
 200
 ```json
-{"id": 1, "title": "JS101: Variables in JavaScript",
+{"id": "JS101", "title": "JS101: Variables in JavaScript",
  "question": "What is a variable in JavaScript, and how do let, const and var differ?",
  "reference_answer": "A variable is a named container ...",
  "rubric": [{"id": 1, "position": 1, "name": "Defines a variable", "description": "...", "max_score": 2},
@@ -22,17 +22,17 @@ IDs below are examples; confirm whether ids are integers or strings with P2.
  "max_total": 8}
 ```
 
-## GET /api/assessments/1/batches
+## GET /api/assessments/JS101/batches
 200 `[{"id": 1, "label": "JS101-B1", "student_count": 3, "confirmed": false}]`
 
-## POST /api/assessments/1/batches   (judge's fresh input)
+## POST /api/assessments/JS101/batches   (judge's fresh input)
 Request `{"label": "Judge test 1", "submissions": [{"student_id": "FR001", "answer": "A variable is a thing in code."}]}`
 201 `{"id": 2, "label": "Judge test 1", "student_count": 1}`
 409 duplicate ids `{"error": "Duplicate student ids", "fields": {"submissions": "FR001"}}`
 422 empty id or answer over 2,000 chars, 10 answers max, 20 batches per assessment max.
 
 ## POST /api/agent/grade
-Request `{"request": "grade the JS101 batch", "assessment_id": 1, "batch_id": 1}`   (`assessment_id` and `batch_id` optional when the request text is used)
+Request `{"request": "grade the JS101 batch", "assessment_id": "JS101", "batch_id": 1}`   (`assessment_id` and `batch_id` optional when the request text is used)
 200 graded:
 ```json
 {"status": "graded", "run_id": "6f1c...-uuid", "max_total": 8,
@@ -41,12 +41,12 @@ Request `{"request": "grade the JS101 batch", "assessment_id": 1, "batch_id": 1}
    "feedback": "...", "attention_flags": [], "proposed_total": 8, "proposed_percentage": 100.0},
   {"student_id": "ST003", "answer_status": "blank", "criteria": [], "feedback": "", "attention_flags": ["Blank answer"], "proposed_total": 0, "proposed_percentage": 0.0}]}
 ```
-200 clarification (P3 to confirm shape): `{"status": "needs_clarification", "run_id": "...", "clarification": "Which assessment: JS101 or PY101?"}`
+200 clarification (P3 to confirm shape): `{"status": "needs_clarification", "run_id": "...", "clarification": "Which assessment and batch do you want graded?"}`
 429 request volume limit reached (guide: control request volume). 502/504 AI quota or timeout:
 `{"error": "The AI service is busy. Try again in a minute.", "kind": "quota", "run_id": "..."}` (`kind`: timeout, quota, invalid_output, tool_limit). The error keeps the request so the UI can offer a manual retry.
 
 ## GET /api/runs/{run_id}
-200 `{"run_id": "...", "status": "succeeded", "model": "...", "proposals": [ ...as above... ], "tool_log": [{"tool_name": "get_assessment_criteria", "arguments": {"assessment_id": 1}, "outcome": "ok", "duration_ms": 41, "created_at": "..."}]}`
+200 `{"run_id": "...", "status": "succeeded", "model": "...", "proposals": [ ...as above... ], "tool_log": [{"tool_name": "get_assessment_criteria", "arguments": {"assessment_id": "JS101"}, "outcome": "ok", "duration_ms": 41, "created_at": "..."}]}`
 
 ## POST /api/batches/{batch_id}/review   (save_reviewed_results)
 Request

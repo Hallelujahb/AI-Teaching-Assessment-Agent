@@ -6,7 +6,7 @@ Guide template. One entry per service or tool; combine when one provider covers 
 | --- | --- | --- | --- |
 | Hosting and backend | TODO | TODO | TODO |
 | Remote database | TODO | TODO | TODO |
-| AI inference | TODO: free tier and exact model | TODO: e.g. https://ai.google.dev/gemini-api/docs/pricing ; quota shown in AI Studio | Finite tool-call limit and a clear quota-error message. No paid billing enabled |
+| AI inference | TODO: provider (AI_BASE_URL) and exact model that passed check_ai | TODO: provider's official pricing link; quota shown in the provider dashboard | Finite tool-call limit and a clear quota-error message. No paid billing enabled |
 | Development tools and other APIs | TODO: Antigravity and each member's coding assistant (free plan) | TODO | TODO |
 
 Frontend hosting: add to the first row or a new row once chosen.
