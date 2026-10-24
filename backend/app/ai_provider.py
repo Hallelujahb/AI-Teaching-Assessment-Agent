@@ -86,7 +86,11 @@ def map_error(exc: Exception) -> AIError:
 
 def _client(timeout: float):
     from openai import OpenAI
-    return OpenAI(base_url=config.ai_base_url(), api_key=config.ai_api_key(), timeout=timeout, max_retries=0)
+    headers = {}
+    if "openrouter.ai" in config.ai_base_url():       # optional OpenRouter attribution, harmless if unset
+        headers = {"HTTP-Referer": os.environ.get("AI_SITE_URL", "https://qeleme-ai.vercel.app"), "X-Title": "Qeleme"}
+    return OpenAI(base_url=config.ai_base_url(), api_key=config.ai_api_key(), timeout=timeout, max_retries=0,
+                  default_headers=headers or None)
 
 
 def generate(messages: list[dict], tools: list[dict] | None = None, schema: Any = None,

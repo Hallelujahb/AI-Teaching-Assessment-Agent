@@ -55,7 +55,7 @@ export default function Login({ onLogin, onRegister, onForgot }) {
         <div className="lg-brand-main">
           <div className="lg-logo">
             <span className="lg-logo-box">ቀ</span>
-            <span className="lg-logo-text">ቀለሜ</span>
+            <span className="lg-logo-text" aria-label="ቀለሜ">{['ቀ', 'ለ', 'ሜ'].map((g, i) => <span key={i} aria-hidden="true" style={{ '--i': i }}>{g}</span>)}</span>
           </div>
           <h2 className="lg-tagline">Review Smart.</h2>
         </div>
@@ -79,11 +79,11 @@ export default function Login({ onLogin, onRegister, onForgot }) {
           </div>
 
           <label className="lg-label" htmlFor="lg-id">
-            {role === 'admin' ? 'Administrator email' : 'Institutional email'}
+            Email or ID
           </label>
           <div className="lg-field">
             <MailIcon />
-            <input id="lg-id" type="text" autoComplete="username" placeholder="name@university.edu"
+            <input id="lg-id" type="text" autoComplete="username" placeholder={role === 'lecturer' ? 'name@university.edu or LT001' : 'name@university.edu or ST001'}
                    value={identifier} onChange={(e) => setIdentifier(e.target.value)} />
           </div>
 

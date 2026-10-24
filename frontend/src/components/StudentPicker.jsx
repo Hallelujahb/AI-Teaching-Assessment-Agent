@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import './StudentPicker.css'
 
 // selected: [{student_id, name}]   onChange(newSelected)   search(q) -> Promise<[{student_id, name}]>
-export default function StudentPicker({ selected, onChange, search }) {
+export default function StudentPicker({ selected, onChange, search, max = Infinity, allowCustom = false }) {
   const [q, setQ] = useState('')
   const [results, setResults] = useState([])
   const [open, setOpen] = useState(false)
@@ -31,13 +31,16 @@ export default function StudentPicker({ selected, onChange, search }) {
   }, [])
 
   const fresh = results.filter((r) => !chosen.has(r.student_id))
-  const add = (rows) => { onChange([...selected, ...rows.map((r) => ({ student_id: r.student_id, name: r.name }))]); setQ('') }
+  const add = (rows) => { onChange([...selected, ...rows.map((r) => ({ student_id: r.student_id, name: r.name }))].slice(0, max)); setQ('') }
+  const full = selected.length >= max
+  const typed = q.trim().toUpperCase()
+  const canCustom = allowCustom && typed && !results.some((r) => r.student_id.toUpperCase() === typed) && !chosen.has(typed)
   const remove = (id) => onChange(selected.filter((s) => s.student_id !== id))
 
   return (
     <div className="sp" ref={box}>
       <div className="sp-head">
-        <span>{selected.length} student{selected.length === 1 ? '' : 's'} selected</span>
+        <span>{selected.length}{Number.isFinite(max) ? `/${max}` : ''} student{selected.length === 1 ? '' : 's'} selected</span>
         {selected.length > 0 && <button type="button" className="sp-clear" onClick={() => onChange([])}>Clear all</button>}
       </div>
       {selected.length > 0 && (
@@ -50,15 +53,18 @@ export default function StudentPicker({ selected, onChange, search }) {
           ))}
         </div>
       )}
-      <input className="sp-input" value={q} placeholder="Search students by ID or name…"
+      <input className="sp-input" value={q} disabled={full} placeholder={full ? `Limit of ${max} reached` : 'Type a name or an ID, for example Abebe or ST004…'}
              onFocus={() => setOpen(true)} onChange={(e) => { setQ(e.target.value); setOpen(true) }}
-             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (fresh[0]) add([fresh[0]]) } }} />
-      {open && (
+             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (fresh[0]) add([fresh[0]]); else if (canCustom) add([{ student_id: typed, name: '' }]) } }} />
+      {open && !full && (
         <div className="sp-list">
           {loading && <div className="sp-note">Searching…</div>}
-          {!loading && fresh.length === 0 && <div className="sp-note">{results.length ? 'Everyone found is already added' : 'No students found'}</div>}
+          {!loading && fresh.length === 0 && !canCustom && <div className="sp-note">{results.length ? 'Everyone found is already added' : 'No students found'}</div>}
           {!loading && fresh.length > 1 && (
             <button type="button" className="sp-all" onClick={() => add(fresh)}>Add all {fresh.length} results</button>
+          )}
+          {!loading && canCustom && fresh.length === 0 && (
+            <button type="button" className="sp-row" onClick={() => add([{ student_id: typed, name: '' }])}>Use ID <b>{typed}</b> (not registered)</button>
           )}
           {fresh.map((r) => (
             <button type="button" className="sp-row" key={r.student_id} onClick={() => add([r])}>

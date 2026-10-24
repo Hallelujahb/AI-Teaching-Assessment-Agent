@@ -17,9 +17,9 @@ load_dotenv()
 
 DEMO = [
     ("lecturer@qeleme.test", "Demo Lecturer", "lecturer", None, "Lecturer#123"),
-    ("st001@qeleme.test", "Student ST001", "student", "ST001", "Student#123"),
-    ("st002@qeleme.test", "Student ST002", "student", "ST002", "Student#123"),
-    ("py001@qeleme.test", "Student PY001", "student", "PY001", "Student#123"),
+    ("st001@qeleme.test", "Abebe Kebede", "student", "ST001", "Student#123"),
+    ("st002@qeleme.test", "Selam Tesfaye", "student", "ST002", "Student#123"),
+    ("py001@qeleme.test", "Hanna Girma", "student", "PY001", "Student#123"),
 ]
 
 

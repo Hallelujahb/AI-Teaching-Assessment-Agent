@@ -3,6 +3,7 @@ import { useState } from "react";
 import { api } from "../api/client.js";
 import ErrorBanner from "./ErrorBanner.jsx";
 
+const MIN = 3;
 const blank = () => ({ name: "", description: "", max_score: 2 });
 const GUIDE = "Covers: what a correct answer says.\nMarks: 2 = fully correct; 1 = partly correct; 0 = missing or wrong.\nNot credited here: points that belong to another criterion.";
 
@@ -10,7 +11,7 @@ export default function AssessmentForm({ initial, onSaved, onCancel }) {
   const [f, setF] = useState(() => initial
     ? { title: initial.title, question: initial.question, reference_answer: initial.reference_answer,
         rubric: initial.rubric.map((c) => ({ name: c.name, description: c.description, max_score: c.max_score })) }
-    : { title: "", question: "", reference_answer: "", rubric: [blank()] });
+    : { title: "", question: "", reference_answer: "", rubric: [blank(), blank(), blank()] });
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const up = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -43,11 +44,11 @@ export default function AssessmentForm({ initial, onSaved, onCancel }) {
             </div>
             <label>What earns marks</label>
             <textarea value={c.description} onChange={(e) => setC(i, "description", e.target.value)} placeholder={GUIDE} />
-            {f.rubric.length > 1 && <div><button className="btn danger" onClick={() => setF({ ...f, rubric: f.rubric.filter((_, j) => j !== i) })}>Remove criterion</button></div>}
+            {f.rubric.length > MIN && <div><button className="btn danger" onClick={() => setF({ ...f, rubric: f.rubric.filter((_, j) => j !== i) })}>Remove criterion</button></div>}
           </div>
         ))}
         <div><button className="btn" disabled={f.rubric.length >= 8} onClick={() => setF({ ...f, rubric: [...f.rubric, blank()] })}>Add a criterion</button></div>
-        <p className="muted small">Clear marks per criterion and a line saying what is not credited give the most consistent grading.</p>
+        <p className="muted small">At least {MIN} criteria are required (up to 8). Clear marks per criterion and a line saying what is not credited give the most consistent grading.</p>
       </div>
       <ErrorBanner error={err} />
       <div className="row"><button className="btn primary" disabled={busy} onClick={save}>{busy ? "Saving..." : initial ? "Save changes" : "Create assessment"}</button><button className="btn" onClick={onCancel}>Cancel</button></div>

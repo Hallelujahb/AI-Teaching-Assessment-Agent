@@ -2,23 +2,21 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
 import ErrorBanner from "./ErrorBanner.jsx";
+import StudentPicker from "./StudentPicker.jsx";
 
 const MAX = 10;
 
 export default function AssignForm({ assessmentId, onAssigned }) {
   const [classes, setClasses] = useState([]);
-  const [students, setStudents] = useState([]);
   const [by, setBy] = useState("class");
   const [classId, setClassId] = useState("");
-  const [ids, setIds] = useState([]);
+  const [people, setPeople] = useState([]);
   const [limit, setLimit] = useState("");
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     api.classes().then((l) => { setClasses(l); if (!l.length) setBy("students"); }).catch(setErr);
-    api.students().then(setStudents).catch(setErr);
   }, []);
-  const toggle = (id) => setIds(ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
 
   const submit = async () => {
     setErr(null);
@@ -26,7 +24,7 @@ export default function AssignForm({ assessmentId, onAssigned }) {
     setBusy(true);
     try {
       const data = { time_limit_minutes: limit === "" ? null : parseInt(limit, 10) };
-      if (by === "class") data.class_id = classId ? parseInt(classId, 10) : null; else data.student_ids = ids;
+      if (by === "class") data.class_id = classId ? parseInt(classId, 10) : null; else data.student_ids = people.map((s) => s.student_id);
       await api.assign(assessmentId, data);
       onAssigned();
     } catch (e) { setErr(e); } finally { setBusy(false); }
@@ -50,15 +48,8 @@ export default function AssignForm({ assessmentId, onAssigned }) {
         </div>
       ) : (
         <div>
-          <label>Students <span className="num">({ids.length}/{MAX})</span></label>
-          <div className="stack" style={{ gap: ".3rem" }}>
-            {students.map((s) => (
-              <label key={s.student_id} className="row nowrap" style={{ gap: ".5rem", fontWeight: 400 }}>
-                <input type="checkbox" style={{ width: "auto" }} checked={ids.includes(s.student_id)} disabled={!ids.includes(s.student_id) && ids.length >= MAX} onChange={() => toggle(s.student_id)} />
-                <span>{s.student_id} · {s.name}</span>
-              </label>
-            ))}
-          </div>
+          <label>Students (search by name or ID)</label>
+          <StudentPicker selected={people} onChange={setPeople} search={(q) => api.students(q)} max={MAX} />
         </div>
       )}
       <div>
@@ -67,7 +58,7 @@ export default function AssignForm({ assessmentId, onAssigned }) {
         <p className="muted small">With a limit, the question stays hidden until the student presses Start. Up to {MAX} students per assignment. The students are fixed when you assign.</p>
       </div>
       <ErrorBanner error={err} />
-      <div><button className="btn primary" disabled={busy || (by === "class" ? !classId : !ids.length)} onClick={submit}>{busy ? "Assigning..." : "Assign"}</button></div>
+      <div><button className="btn primary" disabled={busy || (by === "class" ? !classId : !people.length)} onClick={submit}>{busy ? "Assigning..." : "Assign"}</button></div>
     </div>
   );
 }

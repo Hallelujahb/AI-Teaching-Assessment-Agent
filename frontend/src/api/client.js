@@ -55,7 +55,7 @@ export const api = {
   createAssessment: (data) => post("/api/assessments", data),
   updateAssessment: (id, data) => send("PUT")(`/api/assessments/${id}`, data),
   deleteAssessment: (id) => request(`/api/assessments/${id}`, { method: "DELETE" }),
-  students: () => request("/api/students"),
+  students: (q = "") => request(q ? `/api/students?q=${encodeURIComponent(q)}` : "/api/students"),
   batches: (id) => request(`/api/assessments/${id}/batches`),
   addBatch: (id, data) => post(`/api/assessments/${id}/batches`, data),
   grade: (data) => post("/api/agent/grade", data),

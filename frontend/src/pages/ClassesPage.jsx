@@ -3,20 +3,20 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import ErrorBanner from "../components/ErrorBanner.jsx";
+import StudentPicker from "../components/StudentPicker.jsx";
 
 const MAX = 10;
 
-function ClassForm({ initial, students, onSaved, onCancel }) {
+function ClassForm({ initial, onSaved, onCancel }) {
   const [name, setName] = useState(initial ? initial.name : "");
-  const [ids, setIds] = useState(initial ? initial.students.map((s) => s.student_id) : []);
+  const [people, setPeople] = useState(initial ? initial.students.map((s) => ({ student_id: s.student_id, name: s.name })) : []);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
-  const toggle = (id) => setIds(ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
 
   const save = async () => {
     setBusy(true); setErr(null);
     try {
-      const data = { name, student_ids: ids };
+      const data = { name, student_ids: people.map((s) => s.student_id) };
       if (initial) await api.updateClass(initial.id, data); else await api.createClass(data);
       onSaved();
     } catch (e) { setErr(e); } finally { setBusy(false); }
@@ -27,16 +27,8 @@ function ClassForm({ initial, students, onSaved, onCancel }) {
       <h2>{initial ? "Edit class" : "New class"}</h2>
       <div><label htmlFor="cn">Class name</label><input id="cn" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} placeholder="For example: Year 2 Section 3" /></div>
       <div>
-        <label>Students <span className="num">({ids.length}/{MAX})</span></label>
-        {!students.length && <p className="muted small">No approved students yet. Approve sign-up requests first.</p>}
-        <div className="stack" style={{ gap: ".3rem" }}>
-          {students.map((s) => (
-            <label key={s.student_id} className="row nowrap" style={{ gap: ".5rem", fontWeight: 400 }}>
-              <input type="checkbox" style={{ width: "auto" }} checked={ids.includes(s.student_id)} disabled={!ids.includes(s.student_id) && ids.length >= MAX} onChange={() => toggle(s.student_id)} />
-              <span>{s.student_id} · {s.name}</span>
-            </label>
-          ))}
-        </div>
+        <label>Students (search by name or ID)</label>
+        <StudentPicker selected={people} onChange={setPeople} search={(q) => api.students(q)} max={MAX} />
         <p className="muted small">A class holds at most {MAX} students, because one exam is graded as one batch.</p>
       </div>
       <ErrorBanner error={err} />
@@ -47,16 +39,15 @@ function ClassForm({ initial, students, onSaved, onCancel }) {
 
 export default function ClassesPage() {
   const [list, setList] = useState(null);
-  const [students, setStudents] = useState([]);
   const [form, setForm] = useState(null);
   const [del, setDel] = useState(null);
   const [err, setErr] = useState(null);
   const load = () => api.classes().then(setList).catch(setErr);
-  useEffect(() => { load(); api.students().then(setStudents).catch(setErr); }, []);
+  useEffect(() => { load(); }, []);
   const saved = () => { setForm(null); load(); };
   const remove = () => api.deleteClass(del.id).then(() => { setDel(null); load(); }).catch((e) => { setErr(e); setDel(null); });
 
-  if (form) return <div className="stack"><div className="pagehead"><h1>Classes</h1></div><ClassForm initial={form.initial} students={students} onSaved={saved} onCancel={() => setForm(null)} /></div>;
+  if (form) return <div className="stack"><div className="pagehead"><h1>Classes</h1></div><ClassForm initial={form.initial} onSaved={saved} onCancel={() => setForm(null)} /></div>;
   return (
     <div className="stack">
       <div className="pagehead"><div><h1>Classes</h1><p className="muted">Group students so you can assign an exam to all of them at once.</p></div>

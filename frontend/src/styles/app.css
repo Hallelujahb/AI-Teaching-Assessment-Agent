@@ -5,6 +5,8 @@
   --shadow: 0 1px 2px rgba(15, 23, 42, .06);
   --head: "Plus Jakarta Sans", system-ui, sans-serif; --body: "Inter", system-ui, sans-serif; --ethiopic: "Noto Serif Ethiopic", serif;
   --pad: 1.5rem;
+  --lg-muted: var(--muted); --lg-link: var(--accent); --lg-seg: var(--accent-soft); --lg-seg-on-ink: var(--accent);
+  --lg-border: var(--line2); --lg-field: var(--surface); --lg-ink: var(--ink); --lg-btn: var(--accent);
 }
 [data-theme="dark"] {
   --bg: #0b1120; --surface: #131c2e; --ink: #e8eef9; --muted: #93a3c0; --line: #24324d; --line2: #33456a;
@@ -32,8 +34,9 @@ p { margin: 0 0 .7rem; max-width: 70ch; }
 /* shell */
 .app { display: grid; grid-template-columns: 252px minmax(0, 1fr); min-height: 100vh; }
 .side { position: sticky; top: 0; height: 100vh; overflow-y: auto; background: var(--surface); border-right: 1px solid var(--line); padding: 1.1rem .85rem; display: flex; flex-direction: column; gap: 1.1rem; }
-.brand { display: flex; align-items: center; gap: .7rem; padding: 0 .4rem; }
-.brand div { display: flex; flex-direction: column; line-height: 1.2; } .brand small { color: var(--muted); font-size: .68rem; }
+.brand { display: flex; align-items: center; gap: .7rem; margin: -1.1rem -.85rem 0; padding: 1rem 1.3rem; background: var(--accent); color: var(--accent-ink); }
+.brand .wordmark { color: var(--accent-ink); } .brand .wordmark:hover span { color: var(--accent-soft); }
+.brand div { display: flex; flex-direction: column; line-height: 1.2; } .brand small { color: var(--accent-ink); opacity: .85; font-size: .68rem; }
 .side nav { display: flex; flex-direction: column; gap: .15rem; flex: 1; }
 .navbtn { display: flex; align-items: center; gap: .7rem; text-align: left; background: none; border: 0; border-radius: 8px; padding: .6rem .75rem; font: inherit; font-weight: 500; color: var(--ink); cursor: pointer; transition: background .15s; }
 .navbtn span:first-of-type { flex: 1; } .navbtn svg { flex: none; color: var(--muted); }
