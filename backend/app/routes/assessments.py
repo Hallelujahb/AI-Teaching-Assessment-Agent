@@ -1,7 +1,7 @@
 """Assessments: list, read, create, edit and delete (question, reference answer and rubric),
 plus the list of registered students for the answers form.
 
-An assessment is locked once any batch has been graded, because past runs and results refer to its rubric.
+An assessment is locked once any batch has been graded or it has been assigned to students, because past runs and results refer to its rubric.
 
 Owner: P2
 """
@@ -20,7 +20,8 @@ SELECT a.id, a.title, a.question,
   (SELECT count(*) FROM rubric_criteria c WHERE c.assessment_id=a.id)::int AS criteria_count,
   (SELECT coalesce(sum(c.max_score),0) FROM rubric_criteria c WHERE c.assessment_id=a.id)::int AS max_total,
   (SELECT count(*) FROM submission_batches b WHERE b.assessment_id=a.id)::int AS batch_count,
-  EXISTS (SELECT 1 FROM grading_runs g JOIN submission_batches b ON b.id=g.batch_id WHERE b.assessment_id=a.id) AS locked
+  (EXISTS (SELECT 1 FROM grading_runs g JOIN submission_batches b ON b.id=g.batch_id WHERE b.assessment_id=a.id)
+   OR EXISTS (SELECT 1 FROM assignments x WHERE x.assessment_id=a.id)) AS locked
 FROM assessments a ORDER BY a.id
 """
 
@@ -68,8 +69,9 @@ def _clean(body: dict) -> dict:
 
 
 def _locked(conn, aid: int) -> bool:
-    return bool(conn.execute(
-        "SELECT 1 FROM grading_runs g JOIN submission_batches b ON b.id=g.batch_id WHERE b.assessment_id=%s LIMIT 1", (aid,)).fetchone())
+    return conn.execute(
+        "SELECT EXISTS (SELECT 1 FROM grading_runs g JOIN submission_batches b ON b.id=g.batch_id WHERE b.assessment_id=%s) "
+        "OR EXISTS (SELECT 1 FROM assignments WHERE assessment_id=%s) AS locked", (aid, aid)).fetchone()["locked"]
 
 
 def _save_rubric(conn, aid: int, rows: list) -> None:
@@ -113,7 +115,7 @@ def update_assessment(request: Request, assessment_id: int, body: dict = Body(..
         if not conn.execute("SELECT 1 FROM assessments WHERE id=%s", (assessment_id,)).fetchone():
             raise NotFound("Assessment not found.")
         if _locked(conn, assessment_id):
-            raise Conflict("This assessment has been graded, so its question and rubric are locked.")
+            raise Conflict("This assessment has been graded or assigned, so its question and rubric are locked.")
         if conn.execute("SELECT 1 FROM assessments WHERE lower(title)=lower(%s) AND id<>%s", (d["title"], assessment_id)).fetchone():
             raise Conflict("An assessment with this title already exists.", {"title": "Already used"})
         conn.execute("UPDATE assessments SET title=%s, question=%s, reference_answer=%s WHERE id=%s",
@@ -129,7 +131,7 @@ def delete_assessment(assessment_id: int):
         if not conn.execute("SELECT 1 FROM assessments WHERE id=%s", (assessment_id,)).fetchone():
             raise NotFound("Assessment not found.")
         if _locked(conn, assessment_id):
-            raise Conflict("This assessment has been graded, so it cannot be deleted.")
+            raise Conflict("This assessment has been graded or assigned, so it cannot be deleted. Remove its assignments first.")
         conn.execute("DELETE FROM assessments WHERE id=%s", (assessment_id,))
     return {"deleted": assessment_id}
 

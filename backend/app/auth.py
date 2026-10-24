@@ -11,6 +11,7 @@ import hashlib
 import hmac
 import json
 import os
+import secrets
 import time
 
 from fastapi import Header
@@ -71,6 +72,20 @@ def read_token(token: str) -> int | None:
         return data["uid"] if data["exp"] > time.time() else None
     except Exception:  # noqa: BLE001
         return None
+
+
+def find_user(conn, identifier: str) -> dict | None:
+    """Look an account up by email, student id or staff id."""
+    ident = identifier.strip()
+    if not ident:
+        return None
+    return conn.execute(
+        "SELECT * FROM users WHERE email=%s OR upper(student_id)=upper(%s) OR upper(staff_id)=upper(%s) LIMIT 1",
+        (ident.lower(), ident, ident)).fetchone()
+
+
+def new_reset_code() -> str:
+    return f"{secrets.randbelow(10 ** 8):08d}"
 
 
 def public(user: dict) -> dict:

@@ -2,7 +2,7 @@
 
 Run locally:  uvicorn app.main:app --reload --port 8000   (from backend/)
 Access control: lecturer and super admin reach grading, review and results routes.
-Students reach only /api/me/results. Only the super admin reaches /api/admin/*.
+Students reach only /api/me/* (their results and the exams assigned to them). Only the super admin reaches /api/admin/*.
 
 Owner: P2
 """
@@ -13,7 +13,8 @@ from . import config
 from .auth import require
 from .errors import install_error_handlers
 from .limits import install_limits
-from .routes import admin, approvals, assessments, auth, batches, dashboard, grading, health, me, results, review, runs
+from .routes import (admin, approvals, assessments, assignments, auth, batches, classes, dashboard, exams, grading, health,
+                     me, resets, results, review, runs)
 
 app = FastAPI(title="Qeleme API")
 
@@ -30,9 +31,9 @@ app.add_middleware(
 )
 
 staff = [Depends(require("lecturer", "superadmin"))]
-for module in (assessments, batches, grading, runs, review, results, dashboard, approvals):
+for module in (assessments, batches, grading, runs, review, results, dashboard, approvals, classes, assignments, resets):
     app.include_router(module.router, dependencies=staff)
-for module in (health, auth, me, admin):
+for module in (health, auth, me, exams, admin):
     app.include_router(module.router)
 
 

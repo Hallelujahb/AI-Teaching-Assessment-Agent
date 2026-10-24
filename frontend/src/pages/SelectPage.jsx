@@ -34,9 +34,10 @@ export default function SelectPage({ onStart }) {
               {batches.map((b) => <option key={b.id} value={b.id}>{b.label} ({b.student_count} answers{b.confirmed ? ", confirmed" : ""})</option>)}
             </select>
           </div>
-          <button className="btn primary" disabled={!bid || batch?.confirmed}
+          <button className="btn primary" disabled={!bid || batch?.confirmed || !batch?.student_count}
             onClick={() => onStart({ assessment_id: +aid, batch_id: +bid, request: text.trim() || null })}>Grade this batch</button>
         </div>
+        {batch && !batch.student_count && <p className="muted small">No student has handed in an answer to this batch yet.</p>}
         {batch?.confirmed && <p className="muted small">This batch is confirmed and read-only. Open it under Confirmed results.</p>}
       </div>
       <div className="panel stack">
