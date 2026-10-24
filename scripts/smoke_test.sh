@@ -9,7 +9,7 @@ check() { # name, url
 }
 check "health" "$BASE/api/health"
 check "list assessments" "$BASE/api/assessments"
-AID=$(grep -o '"id": *[0-9]*' /tmp/smoke.out | head -1 | grep -o '[0-9]*')
+AID=$(grep -o "\"id\": *\"\?[A-Za-z0-9_-]*" /tmp/smoke.out | head -1 | sed "s/.*: *\"\?//")
 [ -n "$AID" ] || { echo "FAIL  no assessment id found"; exit 1; }
 check "assessment + rubric ($AID)" "$BASE/api/assessments/$AID"
 check "list batches ($AID)" "$BASE/api/assessments/$AID/batches"

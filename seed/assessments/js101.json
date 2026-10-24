@@ -1,4 +1,5 @@
 {
+  "id": "JS101",
   "title": "JS101: Variables in JavaScript",
   "question": "What is a variable in JavaScript, and how do let, const and var differ?",
   "reference_answer": "A variable is a named container that stores a value so a program can use it later. var is function scoped and can be redeclared and reassigned. let is block scoped and can be reassigned but not redeclared in the same scope. const is block scoped and cannot be reassigned or redeclared.",
