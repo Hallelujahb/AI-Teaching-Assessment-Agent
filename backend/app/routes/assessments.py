@@ -138,12 +138,12 @@ def delete_assessment(assessment_id: int):
 
 @router.get("/api/students")
 def list_students(q: str = "", limit: int = 200):
-    """Active students. ?q= searches id, name and email."""
+    """Active students. ?q= searches id and name."""
     q = q.strip()
     like = f"%{q}%"
     limit = max(1, min(limit, 1000))
     with get_conn() as conn:
         return conn.execute(
             "SELECT student_id, name, email FROM users WHERE role='student' AND status='active' "
-            "AND student_id IS NOT NULL AND (%s::text = '' OR student_id ILIKE %s OR name ILIKE %s OR email ILIKE %s) "
-            "ORDER BY student_id LIMIT %s", (q, like, like, like, limit)).fetchall()
+            "AND student_id IS NOT NULL AND (%s::text = '' OR student_id ILIKE %s OR name ILIKE %s) "
+            "ORDER BY student_id LIMIT %s", (q, like, like, limit)).fetchall()

@@ -48,7 +48,7 @@ def cleanup(conn):
 @pytest.fixture
 def assessment(client, cleanup):
     body = {"title": f"pytest {uuid.uuid4().hex[:6]}", "question": "What is a variable?", "reference_answer": "A named value.",
-            "rubric": [{"name": "Defines it", "description": "Says it stores a value", "max_score": 2}]}
+            "rubric": [{"name": "Criterion 1", "description": "d", "max_score": 2}, {"name": "Criterion 2", "description": "d", "max_score": 2}, {"name": "Criterion 3", "description": "d", "max_score": 2}]}
     r = client.post("/api/assessments", json=body, headers=headers(client, LECTURER))
     assert r.status_code == 201, r.text
     cleanup["assessments"].append(r.json()["id"])
@@ -201,7 +201,7 @@ def test_assigned_assessment_is_locked(client, cleanup, assessment):
     assert assign(client, cleanup, assessment, student_ids=["ST001"]).status_code == 201
     assert client.get(f"/api/assessments/{assessment}", headers=headers(client, LECTURER)).json()["locked"] is True
     body = {"title": "changed", "question": "q", "reference_answer": "a",
-            "rubric": [{"name": "n", "description": "d", "max_score": 1}]}
+            "rubric": [{"name": "n1", "description": "d", "max_score": 1}, {"name": "n2", "description": "d", "max_score": 1}, {"name": "n3", "description": "d", "max_score": 1}]}
     assert client.put(f"/api/assessments/{assessment}", json=body, headers=headers(client, LECTURER)).status_code == 409
 
 
