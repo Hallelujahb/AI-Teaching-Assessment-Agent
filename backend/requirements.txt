@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pydantic
+psycopg[binary]
+openai
+slowapi
+python-dotenv
+pytest
+httpx
