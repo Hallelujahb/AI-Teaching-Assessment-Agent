@@ -12,3 +12,9 @@ By AI provider:
 - The daily request cap is enforced in `limits.py` and set to 40 (out of 50) to reserve 10 for the demo and judges' fresh input.
 
 Injection protection is a prompt rule plus a code-layer heuristic that catches obvious instruction-like text in answers, so it is not a guarantee against subtle prompt injection. See also: only obvious injection attempts are detected; sophisticated ones may pass and should be caught during lecturer review.
+
+Other limits (from the code):
+- A batch holds at most 10 answers of at most 2,000 characters; an assessment holds at most 20 batches.
+- Once a batch is confirmed it is read-only; a regrade needs a new batch.
+- Rate limits are kept in memory, so they reset when the free host restarts.
+- Seed data is fictitious: two assessments, three short answers each.

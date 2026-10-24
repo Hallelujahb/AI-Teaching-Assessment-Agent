@@ -10,3 +10,5 @@ dist/
 .DS_Store
 
 .p5_backup/
+*.env
+*.bak
