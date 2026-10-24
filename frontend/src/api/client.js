@@ -16,6 +16,9 @@ export const onUnauthorized = (fn) => { onExpired = fn; };
 
 async function request(path, options = {}) {
   const isGet = !options.method || options.method === "GET";
+  // quiet: true means a 401 won't fire the global signOut — used for background refresh calls
+  // so a transient failure never kicks an actively-logged-in user back to the login page.
+  const quiet = options.quiet === true;
   if (isGet) { const hit = cache.get(path); if (hit && Date.now() - hit.t < TTL) return hit.v; }
   const res = await fetch(base + path, {
     ...options,
@@ -23,7 +26,7 @@ async function request(path, options = {}) {
   });
   const body = await res.json().catch(() => null);
   if (!res.ok) {
-    if (res.status === 401 && token && !path.includes("/auth/")) onExpired();
+    if (!quiet && res.status === 401 && token && !path.includes("/auth/")) onExpired();
     const error = new Error((body && (body.message || body.error)) || "Request failed");
     error.status = res.status;
     error.details = body;
@@ -44,6 +47,7 @@ export const api = {
   me: () => request("/api/auth/me"),
   dashboard: () => request("/api/dashboard"),
   approvals: () => request("/api/approvals"),
+  approvalsQuiet: () => request("/api/approvals", { quiet: true }),
   approve: (id) => post(`/api/approvals/${id}/approve`),
   reject: (id) => post(`/api/approvals/${id}/reject`),
   assessments: () => request("/api/assessments"),
@@ -65,6 +69,7 @@ export const api = {
   adminResetPassword: (id, password) => post(`/api/admin/users/${id}/password`, { password }),
   adminDeleteUser: (id) => request(`/api/admin/users/${id}`, { method: "DELETE" }),
   resets: () => request("/api/resets"),
+  resetsQuiet: () => request("/api/resets", { quiet: true }),
   issueReset: (id) => post(`/api/resets/${id}/issue`),
   dismissReset: (id) => post(`/api/resets/${id}/dismiss`),
   classes: () => request("/api/classes"),

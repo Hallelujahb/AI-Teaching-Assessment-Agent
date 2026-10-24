@@ -41,7 +41,7 @@ export default function App() {
     onUnauthorized(signOut);
     if (hasToken()) api.me().then(setUser).catch(signOut).finally(() => setChecking(false));
   }, []);
-  useEffect(() => { if (user && user.role !== "student") Promise.all([api.approvals(), api.resets()]).then(([a, r]) => setPending(a.length + r.length)).catch(() => {}); }, [user, page]);
+  useEffect(() => { if (user && user.role !== "student") Promise.all([api.approvalsQuiet(), api.resetsQuiet()]).then(([a, r]) => setPending(a.length + r.length)).catch(() => {}); }, [user, page]);
 
   const go = (p, extra = {}) => { setPage(p); setFlow(extra.flow || { step: "select" }); setBatch(extra.batch ?? null); setMenu(false); window.scrollTo(0, 0); };
 

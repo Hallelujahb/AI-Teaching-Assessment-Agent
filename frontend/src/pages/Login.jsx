@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { applyTheme, initialTheme } from '../theme'
+import { api, setToken } from '../api/client.js'
 import './Login.css'
-
-const API = import.meta.env.VITE_API_BASE_URL || ''
 
 const Icon = ({ children, size = 18 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -35,18 +34,9 @@ export default function Login({ onLogin, onRegister, onForgot }) {
     setError('')
     setBusy(true)
     try {
-      const res = await fetch(`${API}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: identifier.trim(), password, as: role }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.message || data.error || 'Could not sign in. Try again.')
-      const store = keep ? localStorage : sessionStorage
-      store.setItem('qeleme_token', data.token)
-      store.setItem('qeleme_user', JSON.stringify(data.user))
-      /*wired*/ window.localStorage.setItem('qeleme_token', data.token)
-      if (onLogin) onLogin(data)
+      const data = await api.login(identifier.trim(), password, role)
+      setToken(data.token)
+      if (onLogin) onLogin(data.user)
       else window.location.assign('/')
     } catch (err) {
       setError(err.message || 'Could not sign in. Try again.')
