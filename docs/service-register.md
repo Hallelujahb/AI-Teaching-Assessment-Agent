@@ -1,17 +1,13 @@
 # Service register
 
-Guide template. One entry per service or tool; combine when one provider covers several purposes. No keys, passwords or payment details. Keep redacted plan evidence (screenshots) available if requested.
+Guide template. One entry per service or development tool; combined where one provider covers several purposes. No keys, passwords or payment details. Redacted plan evidence (screenshots) is kept available for a private check.
 
-| Service and purpose | Free plan or model | Quota shown in provider dashboard | How we stay within it |
+| Service and purpose | Free plan or model | Pricing link and main quota | How we stay within it |
 | --- | --- | --- | --- |
-| Hosting and backend | TODO | TODO | TODO |
-| Remote database | TODO | TODO | TODO |
-| AI inference | OpenRouter, model `provider/model:free` (pinned, Gate 0 approved) | 20 requests/minute, 50 requests/day on non-billing account | max_retries=0 (no auto-retry); DAILY_MODEL_REQUEST_CAP=40 in limits.py; development on stub provider; live calls only for Gate 0 (≤5), Gate 2 (1), 5 test cases (4 live), 1 injection sample, 1 demo run, judges' fresh input. All prompt iteration done with the stub. |
-| Development tools and other APIs | Antigravity, each member's coding assistant (free plan) | TODO | TODO |
+| Hosting and backend (FastAPI) | TODO (P2): host and plan name | TODO: official pricing link and main limit | TODO |
+| Frontend hosting (static Vite build) | TODO (P1): host and plan name | TODO: official pricing link and main limit | TODO |
+| Remote database (Postgres) | TODO (P2): provider and plan name | TODO: official pricing link; storage and compute limits | TODO |
+| AI inference | TODO (P3): provider and the exact model id that passed `check_ai` | TODO: official pricing link; the quota shown in the provider dashboard for that model | At most 4 tool calls and 5 model turns per run, one validation retry, no automatic retries, a daily run limit, a clear quota-error message, no billing enabled |
+| Development tools and other APIs | TODO: Antigravity and each member's coding assistant, each on a free plan | TODO | TODO |
 
-Frontend hosting: add to the first row or a new row once chosen.
-
-**Notes:**
-- The model is selected via `AI_PROVIDER=openrouter` and `AI_MODEL=provider/model:free` in host secrets (never in the repo).
-- `AI_BASE_URL` = `https://openrouter.ai/api/v1`, `AI_API_KEY` = `OPENROUTER_API_KEY`.
-- `FORCE_AI_FAILURE=1` forces a quota-style error with zero provider calls, for failure testing without spending quota.
+Billing: no card or paid plan on any service. If a service asks for one, we switch services and update this register.
