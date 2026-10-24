@@ -1,9 +1,10 @@
 -- Qeleme schema. Applied by: python -m app.setup_db
 -- Owner: P2. Tables and rules are described in section 5 of the plan.
 -- gen_random_uuid() needs Postgres 13 or newer.
+-- assessments.id is a whole number (SERIAL) so ids match docs/api-examples.md and seed.py.
 
 CREATE TABLE IF NOT EXISTS assessments (
-  id TEXT PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   title TEXT NOT NULL,
   question TEXT NOT NULL,
   reference_answer TEXT NOT NULL
@@ -11,7 +12,7 @@ CREATE TABLE IF NOT EXISTS assessments (
 
 CREATE TABLE IF NOT EXISTS rubric_criteria (
   id SERIAL PRIMARY KEY,
-  assessment_id TEXT NOT NULL REFERENCES assessments(id) ON DELETE CASCADE,
+  assessment_id INT NOT NULL REFERENCES assessments(id) ON DELETE CASCADE,
   position INT NOT NULL,
   name TEXT NOT NULL,
   description TEXT NOT NULL,
@@ -21,7 +22,7 @@ CREATE TABLE IF NOT EXISTS rubric_criteria (
 
 CREATE TABLE IF NOT EXISTS submission_batches (
   id SERIAL PRIMARY KEY,
-  assessment_id TEXT NOT NULL REFERENCES assessments(id) ON DELETE CASCADE,
+  assessment_id INT NOT NULL REFERENCES assessments(id) ON DELETE CASCADE,
   label TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (assessment_id, label)
@@ -46,6 +47,11 @@ CREATE TABLE IF NOT EXISTS grading_runs (
   error TEXT
 );
 
+-- One running run per batch, enforced by the database itself (two requests cannot both start).
+CREATE UNIQUE INDEX IF NOT EXISTS one_running_run_per_batch
+  ON grading_runs (batch_id) WHERE status = 'running';
+CREATE INDEX IF NOT EXISTS grading_runs_batch_idx ON grading_runs (batch_id, started_at);
+
 CREATE TABLE IF NOT EXISTS tool_logs (
   id SERIAL PRIMARY KEY,
   run_id UUID NOT NULL REFERENCES grading_runs(id) ON DELETE CASCADE,
@@ -55,6 +61,7 @@ CREATE TABLE IF NOT EXISTS tool_logs (
   duration_ms INT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS tool_logs_run_idx ON tool_logs (run_id, id);
 
 CREATE TABLE IF NOT EXISTS ai_proposals (
   id SERIAL PRIMARY KEY,
