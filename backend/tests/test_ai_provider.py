@@ -137,9 +137,18 @@ def test_openrouter_timeout(monkeypatch):
 def test_openrouter_rate_limit(monkeypatch):
     from openai import RateLimitError
 
+    class FakeRequest:
+        id = "req-1"
+        method = "POST"
+        url = "https://test"
+        headers = {}
     class FakeResp:
         status_code = 429
         message = "rate limited"
+        request = FakeRequest()
+        headers = {}
+        def json(self):
+            return {"error": {"message": "rate limited"}}
 
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     monkeypatch.setenv("AI_MODEL", "test-model")
@@ -147,7 +156,7 @@ def test_openrouter_rate_limit(monkeypatch):
     monkeypatch.delenv("FORCE_AI_FAILURE", raising=False)
 
     def raise_rl(**kwargs):
-        raise RateLimitError("rate limited", response=FakeResp(), body=FakeResp())
+        raise RateLimitError("rate limited", response=FakeResp(), body={"error": {"message": "rate limited"}})
     _patch_openai(monkeypatch, raise_rl)
 
     from app.ai_provider import _OpenRouterProvider
@@ -162,6 +171,10 @@ def test_openrouter_503_is_quota(monkeypatch):
     class FakeResp:
         status_code = 503
         message = "unavailable"
+        request = type("R", (), {"id": "r", "method": "POST", "url": "", "headers": {}})()
+        headers = {}
+        def json(self):
+            return {"error": {"message": "unavailable"}}
 
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     monkeypatch.setenv("AI_MODEL", "test-model")
@@ -169,7 +182,7 @@ def test_openrouter_503_is_quota(monkeypatch):
     monkeypatch.delenv("FORCE_AI_FAILURE", raising=False)
 
     def raise_503(**kwargs):
-        raise APIError("unavailable", response=FakeResp(), body=FakeResp())
+        raise APIError("unavailable", response=FakeResp(), body={"error": {"message": "unavailable"}})
     _patch_openai(monkeypatch, raise_503)
 
     from app.ai_provider import _OpenRouterProvider
@@ -327,9 +340,18 @@ def test_map_error_timeout():
 def test_map_error_rate_limit():
     from openai import RateLimitError
 
+    class FakeRequest:
+        id = "req-1"
+        method = "POST"
+        url = "https://test"
+        headers = {}
     class FakeResp:
         status_code = 429
         message = "rate limited"
+        request = FakeRequest()
+        headers = {}
+        def json(self):
+            return {"error": {"message": "rate limited"}}
 
     result = map_error(RateLimitError("rl", response=FakeResp()))
     assert result.extra["kind"] == "quota"
