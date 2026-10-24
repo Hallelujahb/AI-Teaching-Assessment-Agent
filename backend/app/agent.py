@@ -51,49 +51,92 @@ class _Clarification(Exception):
 # ---------------------------------------------------------------- entry point
 
 
-def run_grading(request_text: str | None, assessment_id: int | None, batch_id: int | None) -> dict:
-    aid, bid, question = _resolve_target(request_text, assessment_id, batch_id)
-    if question:
-        return _clarification(None, question)
+# The real modules, captured at import time for default fallback.
+_tools_module = tools
+_runs_module = runs
+_scoring_module = scoring
 
-    assessment = tools.fetch_assessment(aid)
+
+def run_grading(request_text: str | None, assessment_id: int | str | None, batch_id: int | str | None,
+                provider=None, tools=None, runs=None, scoring=None) -> dict:
+    """Grade one batch.
+
+    Returns a dict with ``outcome`` key:
+      - ``{"outcome": "graded", "run_id": ..., "results": [...]}``
+      - ``{"outcome": "needs_clarification", "run_id": ..., "clarification": {"question": str}}``
+      - ``{"outcome": "error", "run_id": ..., "error": {"kind": str, "message": str}}``
+
+    ``provider``, ``tools``, ``runs`` and ``scoring`` default to the real modules;
+    tests pass fakes to avoid network and database calls.
+    """
+    _tools = tools if tools is not None else _tools_module
+    _runs = runs if runs is not None else _runs_module
+    _scoring = scoring if scoring is not None else _scoring_module
+    _provider = provider or ai_provider
+
+    # FORCE_AI_FAILURE short-circuits before any work (test case 5).
+    if config.force_ai_failure():
+        return {"outcome": "error", "run_id": None, "error": {"kind": "quota", "message": "force_ai_failure"}}
+
+    # Resolve target: if both ids provided, skip DB lookup.
+    aid, bid, question = _resolve(request_text, assessment_id, batch_id, _tools)
+    if question:
+        return {"outcome": "needs_clarification", "run_id": None,
+                "clarification": {"question": question}}
+
+    assessment = _tools.fetch_assessment(aid)
     problem = _assessment_problem(assessment)
     if problem:
-        return _clarification(None, problem)
-    if not config.force_ai_failure() and not config.ai_configured():
-        raise AIError("unavailable")
+        return {"outcome": "needs_clarification", "run_id": None,
+                "clarification": {"question": problem}}
+    if not config.force_ai_failure() and not provider and not config.ai_configured():
+        return {"outcome": "error", "run_id": None, "error": {"kind": "unavailable", "message": "not configured"}}
 
     rubric = [{k: c.get(k) for k in ("id", "position", "name", "description", "max_score")}
               for c in assessment["rubric"]]
-    run_id = runs.create_run(bid, config.ai_model() or None, rubric)   # 404 / 409 come from here
+    run_id = _runs.create_run(bid, config.ai_model() or None, rubric)   # 404 / 409 come from here
     try:
-        return _run(run_id, aid, bid, assessment, rubric, request_text)
+        result = _run(run_id, aid, bid, assessment, rubric, request_text, _provider, _tools, _runs, _scoring)
+        return {"outcome": "graded", "run_id": run_id, **result}
     except _Clarification as ask:
-        _close(run_id, "Clarification requested")
-        return _clarification(run_id, ask.question)
+        _close(_runs, run_id, "Clarification requested")
+        return {"outcome": "needs_clarification", "run_id": run_id,
+                "clarification": {"question": ask.question}}
     except AIError as exc:
-        _close(run_id, exc.message)
-        raise AIError(exc.extra.get("kind") or "invalid_output", message=exc.message, run_id=run_id) from None
-    except AppError:
-        _close(run_id, "Grading stopped")
-        raise
-    except ValueError:                                   # save_proposals refused the proposal list
+        _close(_runs, run_id, exc.message)
+        kind = exc.extra.get("kind") or "invalid_output"
+        return {"outcome": "error", "run_id": run_id, "error": {"kind": kind, "message": exc.message}}
+    except AppError as exc:
+        _close(_runs, run_id, "Grading stopped")
+        return {"outcome": "error", "run_id": run_id, "error": {"kind": "bad_request", "message": exc.message}}
+    except ValueError:
         log.exception("Proposals did not match the batch")
-        _close(run_id, "Proposals did not match the batch")
-        raise AIError("invalid_output", run_id=run_id) from None
+        _close(_runs, run_id, "Proposals did not match the batch")
+        return {"outcome": "error", "run_id": run_id, "error": {"kind": "invalid_output", "message": "Proposals did not match"}}
     except Exception:
         log.exception("Unexpected error in grading run %s", run_id)
-        _close(run_id, "Unexpected error")
-        raise
+        _close(_runs, run_id, "Unexpected error")
+        return {"outcome": "error", "run_id": run_id, "error": {"kind": "unexpected", "message": "Unexpected error"}}
+
+
+# The real modules, captured at import time for default fallback.
+
+
+def _resolve(request_text, assessment_id, batch_id, _tools):
+    """Resolve (assessment_id, batch_id, clarification). If both ids given, return them directly."""
+    if assessment_id is not None and batch_id is not None:
+        return assessment_id, batch_id, None
+    # Fall back to catalog-based resolution (needs database or fake catalog).
+    return _resolve_target(request_text, assessment_id, batch_id)
 
 
 def _clarification(run_id: str | None, question: str) -> dict:
-    return {"status": "needs_clarification", "run_id": run_id, "clarification": question}
+    return {"outcome": "needs_clarification", "run_id": run_id, "clarification": {"question": question}}
 
 
-def _close(run_id: str, message: str) -> None:
+def _close(_runs, run_id: str, message: str) -> None:
     try:
-        runs.finish_run(run_id, "failed", message)
+        _runs.finish_run(run_id, "failed", message)
     except Exception:  # noqa: BLE001 - never hide the real error
         log.warning("Could not close run %s", run_id)
 
@@ -182,14 +225,14 @@ def _assessment_problem(assessment: dict) -> str | None:
 # ---------------------------------------------------------------- the run
 
 
-def _run(run_id: str, aid: int, bid: int, assessment: dict, rubric: list[dict], request_text: str | None) -> dict:
+def _run(run_id, aid, bid, assessment, rubric, request_text, _provider, _tools, _runs, _scoring):
     deadline = time.monotonic() + config.agent_timeout_seconds()
     ctx: dict = {"criteria": None, "subs": None}
 
-    _tool_phase(run_id, aid, bid, request_text, ctx, deadline)
+    _tool_phase(run_id, aid, bid, request_text, ctx, deadline, _provider, _tools, _scoring)
 
     subs = ctx["subs"]
-    to_model = [s for s in subs if not scoring.detect_answer_status(s["answer"])]   # blank never reaches the model
+    to_model = [s for s in subs if not _scoring.detect_answer_status(s["answer"])]   # blank never reaches the model
     graded_input = {**assessment, "rubric": rubric}
 
     if not to_model:
@@ -198,34 +241,34 @@ def _run(run_id: str, aid: int, bid: int, assessment: dict, rubric: list[dict], 
                   time.perf_counter())
         parsed_any = True
     else:
-        output = _grading_call(run_id, "model_grading", graded_input, to_model, deadline)
+        output = _grading_call(run_id, "model_grading", graded_input, to_model, deadline, _provider)
         parsed_any = output is not None
         if isinstance(output, dict) and output.get("status") == "needs_clarification":
             question = output.get("clarification")
             raise _Clarification(question.strip() if isinstance(question, str) and question.strip() else DEFAULT_QUESTION)
 
-    report = scoring.validate_model_output(output, rubric, subs)
+    report = _scoring.validate_model_output(output, rubric, subs)
     if not report["all_valid"]:
         retry_ids = list(report["retry_ids"])
         problems = {sid: report["students"][sid]["reasons"] for sid in retry_ids}
         retry_subs = [s for s in subs if s["student_id"] in retry_ids]
         retry_output = _grading_call(run_id, "model_retry", graded_input,
-                                     [s for s in retry_subs], deadline, problems=problems)
+                                     [s for s in retry_subs], deadline, _provider, problems=problems)
         parsed_any = parsed_any or retry_output is not None
         if not parsed_any:
             raise AIError("invalid_output")
-        retry_report = scoring.validate_model_output(retry_output, rubric, retry_subs)
-        report = scoring.merge_retry_report(report, retry_report)
+        retry_report = _scoring.validate_model_output(retry_output, rubric, retry_subs)
+        report = _scoring.merge_retry_report(report, retry_report)
 
-    proposals = scoring.build_proposals(subs, rubric, report)
+    proposals = _scoring.build_proposals(subs, rubric, report)
     manual = sum(1 for p in proposals if p["answer_status"] == "needs_manual_grading")
     _log_step(run_id, "validate_model_output",
               {"students": len(subs), "needs_manual_grading": manual, "notes": report["notes"][:10]},
               f"ok: {len(proposals) - manual} proposed, {manual} need manual grading", time.perf_counter())
 
-    runs.save_proposals(run_id, proposals)
-    view = runs.get_run(run_id)
-    return {"status": "graded", "run_id": run_id, "max_total": view["max_total"],
+    _runs.save_proposals(run_id, proposals)
+    view = _runs.get_run(run_id)
+    return {"max_total": view["max_total"],
             "results": view["proposals"], "tool_log": view["tool_log"]}
 
 
@@ -236,12 +279,12 @@ def _complete(ctx: dict) -> bool:
     return ctx["criteria"] is not None and ctx["subs"] is not None
 
 
-def _tool_phase(run_id, aid, bid, request_text, ctx, deadline) -> None:
+def _tool_phase(run_id, aid, bid, request_text, ctx, deadline, _provider, _tools, _scoring) -> None:
     messages = [{"role": "system", "content": prompts.TOOL_PHASE_SYSTEM},
                 {"role": "user", "content": prompts.tool_phase_user(request_text, aid, bid)}]
     calls_used = 0
     for _ in range(config.AGENT_MAX_TOOL_TURNS):
-        reply = ai_provider.generate(messages, tools=prompts.TOOL_DECLARATIONS, deadline=deadline)
+        reply = _provider.generate(messages, tools=prompts.TOOL_DECLARATIONS, deadline=deadline)
         if not reply.tool_calls:
             if _complete(ctx):
                 return
@@ -252,7 +295,7 @@ def _tool_phase(run_id, aid, bid, request_text, ctx, deadline) -> None:
             if calls_used >= config.AGENT_MAX_TOOL_CALLS:
                 raise AIError("tool_limit")
             calls_used += 1
-            content = _execute_tool(run_id, call, aid, bid, ctx)
+            content = _execute_tool(run_id, call, aid, bid, ctx, _tools, _scoring)
             messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
         if _complete(ctx):
             return                                          # got everything: no wasted extra turn
@@ -272,15 +315,16 @@ def _as_int(value) -> int | None:
     return None
 
 
-def _execute_tool(run_id, call, aid, bid, ctx) -> str:
+def _execute_tool(run_id, call, aid, bid, ctx, _tools, _scoring) -> str:
     """Run one tool the model asked for and return the text the model sees. The ids are checked in
     code: a model that invents an id gets an error back and nothing runs."""
-    args = call.arguments if isinstance(call.arguments, dict) else {}
+    args = json.loads(call.arguments) if isinstance(call.arguments, str) else (call.arguments or {})
+    args = args if isinstance(args, dict) else {}
     if call.name == "get_assessment_criteria":
         if _as_int(args.get("assessment_id")) != aid:
             return json.dumps({"error": f"Unknown assessment id. Use assessment_id={aid}."})
         try:
-            result = tools.get_assessment_criteria(aid, run_id=run_id)
+            result = _tools.get_assessment_criteria(aid, run_id=run_id)
         except AppError as exc:
             return json.dumps({"error": exc.message})
         ctx["criteria"] = result
@@ -293,11 +337,11 @@ def _execute_tool(run_id, call, aid, bid, ctx) -> str:
         if _as_int(args.get("assessment_id")) != aid or _as_int(args.get("batch_id")) != bid:
             return json.dumps({"error": f"Unknown id. Use assessment_id={aid} and batch_id={bid}."})
         try:
-            result = tools.get_submissions(aid, bid, run_id=run_id)
+            result = _tools.get_submissions(aid, bid, run_id=run_id)
         except AppError as exc:
             return json.dumps({"error": exc.message})
         ctx["subs"] = result["submissions"]
-        assessable = [s for s in result["submissions"] if not scoring.detect_answer_status(s["answer"])]
+        assessable = [s for s in result["submissions"] if not _scoring.detect_answer_status(s["answer"])]
         skipped = len(result["submissions"]) - len(assessable)
         return json.dumps({"batch": result["label"], "submissions": assessable,
                            "note": f"{skipped} blank or too-short answer(s) were handled by the system and are not listed."})
@@ -307,14 +351,14 @@ def _execute_tool(run_id, call, aid, bid, ctx) -> str:
 # ---------------------------------------------------------------- grading calls
 
 
-def _grading_call(run_id, label, assessment, answers, deadline, problems=None) -> dict | None:
+def _grading_call(run_id, label, assessment, answers, deadline, _provider, problems=None) -> dict | None:
     """One model call that grades the given students. Returns the parsed JSON dict, or None."""
     started = time.perf_counter()
     messages = [{"role": "system", "content": prompts.GRADING_SYSTEM},
                 {"role": "user", "content": prompts.grading_prompt(assessment, answers, problems)}]
     ids = [a["student_id"] for a in answers]
     try:
-        reply = ai_provider.generate(messages, schema=output_schema, deadline=deadline)
+        reply = _provider.generate(messages, schema=output_schema, deadline=deadline)
     except AIError as exc:
         _log_step(run_id, label, {"students": ids}, f"error: {exc.extra.get('kind')}", started)
         raise

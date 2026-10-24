@@ -9,6 +9,11 @@ Owner: P3
 Plan: section 4
 """
 import json
+import re
+import secrets
+
+from .errors import AIError
+from .scoring import detect_answer_status
 
 # ---------------------------------------------------------------- tool declarations
 # Only the two retrieval tools are offered to the model. The save tool is NOT exposed in the
@@ -44,6 +49,9 @@ TOOL_DECLARATIONS = [
         },
     },
 ]
+
+# Alias for tests that import tool_schemas.
+tool_schemas = TOOL_DECLARATIONS
 
 # ---------------------------------------------------------------- system prompts
 
@@ -87,6 +95,7 @@ OUTPUT_EXAMPLE = """{
   ]
 }"""
 
+
 # ---------------------------------------------------------------- helpers
 
 
@@ -123,7 +132,8 @@ def format_answers(answers: list[dict]) -> str:
 def grading_prompt(assessment: dict, answers: list[dict], problems: dict | None = None) -> str:
     """Whole-batch grading prompt. `answers` holds only assessable answers.
 
-    `problems` ({student_id: [reasons]}) is set for the single retry."""
+    `problems` ({student_id: [reasons]}) is set for the single retry.
+    """
     rubric = assessment["rubric"]
     maximum = sum(c["max_score"] for c in rubric)
     parts = [
@@ -144,3 +154,90 @@ def grading_prompt(assessment: dict, answers: list[dict], problems: dict | None 
                  f"Include exactly one entry in results for each of these students: {ids}.\n"
                  "Each entry must contain every criterion_id exactly once.")
     return "\n\n".join(parts)
+
+
+# ---------------------------------------------------------------- nonce + model output parsing
+
+
+_FENCE = re.compile(r"^```[a-zA-Z]*\s*|\s*```$", re.M)
+_THINK = re.compile(r"(?s)```thought>.*?```|```thinking>.*?```|<!--.*?-->", re.S)
+
+
+def make_nonce() -> str:
+    """Random per-run delimiter so a student answer cannot fake the block boundary."""
+    return secrets.token_hex(8)
+
+
+def build_answer_blocks(submissions: list[dict], nonce: str) -> str:
+    """Render only assessable submissions in delimited blocks for the model.
+
+    Blanks and too-short answers (detect_answer_status returns non-None) are skipped — they are
+    handled by code, never seen by the model.
+    """
+    blocks = []
+    for s in submissions:
+        answer = s.get("answer") or ""
+        if detect_answer_status(answer):
+            continue
+        sid = json.dumps(str(s["student_id"]))
+        text = _clean(str(answer))
+        blocks.append(f"<<<ANSWER student_id={sid} nonce={nonce}>>>\n{text}\n<<<END ANSWER>>>")
+    if not blocks:
+        return f"(no assessable answers; nonce={nonce})"
+    return "\n\n".join(blocks)
+
+
+def build_catalog_context(catalog: list[dict]) -> str:
+    """Render the assessment/batch catalog for the model (so it can match a request to an id)."""
+    lines = []
+    for a in catalog:
+        lines.append(f"- assessment_id {a['id']}: {a.get('title', '')}")
+        for b in a.get("batches", []):
+            lines.append(f"  - batch_id {b['id']}: {b['label']}")
+    return "\n".join(lines) if lines else "No assessments found."
+
+
+def build_initial_messages(assessment_id, rubric, submissions, nonce, catalog_text, request_text):
+    """Build the [system, user] messages for a grading call (initial or retry).
+
+    ``problems`` is None for the initial call; pass a {sid: [reasons]} dict for a retry.
+    """
+    raise NotImplementedError("Use grading_prompt() instead")
+
+
+def build_retry_message(retry_ids: list, report: dict) -> str:
+    """Build the user message for a retry call, listing why each student was rejected."""
+    lines = ["Your previous output was rejected for these students. Grade ONLY the students below "
+             "again, and fix each problem. Do not call any tools this time."]
+    students = report.get("students", {})
+    for sid in retry_ids:
+        reasons = students.get(sid, {}).get("reasons", ["unknown"])
+        lines.append(f"- {sid}: " + "; ".join(reasons))
+    return "\n".join(lines)
+
+
+def parse_model_output(text: str | None) -> dict:
+    """Parse the model's JSON text into a dict. Raises AIError('invalid_output') on failure.
+
+    Strips markdown fences and think blocks, then extracts the first balanced JSON object.
+    """
+    if not isinstance(text, str) or not text.strip():
+        raise AIError("invalid_output", message="The model returned an empty response.")
+    cleaned = _THINK.sub("", text)
+    cleaned = _FENCE.sub("", cleaned).strip()
+    candidates = [cleaned]
+    start, end = cleaned.find("{"), cleaned.rfind("}")
+    if start != -1 and end > start:
+        candidates.append(cleaned[start:end + 1])
+    for candidate in candidates:
+        try:
+            value = json.loads(candidate)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(value, dict):
+            # Validate status field.
+            status = value.get("status")
+            if status not in ("graded", "needs_clarification"):
+                raise AIError("invalid_output", message=f"Unexpected status {status!r} in model output.")
+            return value
+    raise AIError("invalid_output", message="The model output was not valid JSON.")

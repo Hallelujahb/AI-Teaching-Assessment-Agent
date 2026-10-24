@@ -37,6 +37,7 @@ class StubProviderError(Exception):
         super().__init__(message)
         self.kind = kind
 
+StubError = StubProviderError  # alias for cleaner test imports
 
 def _valid_output(rubric: list[dict], submissions: list[dict]) -> dict:
     results = []
