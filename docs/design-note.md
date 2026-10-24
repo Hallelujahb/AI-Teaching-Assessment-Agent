@@ -1,59 +1,51 @@
-# Design note (1 to 2 pages)
+# Qeleme: AI Teaching Assessment Agent — Design Note
 
 ## Workflow
-Request, then clarification if essential information is missing, then the agent retrieves the assessment and the answers, the model proposes scores, code enforces limits and totals, the lecturer reviews and confirms, the result is saved and can be reopened.
+
+Request, then clarification if essential information is missing (no assessment or batch named), then the agent retrieves the rubric and answers using two retrieval tools, the model proposes scores and evidence for each criterion, code validates (never clamps), the lecturer reviews and corrects, then confirms and the result is saved and can be reopened.
 
 ```mermaid
 flowchart LR
   L[Lecturer] --> UI[Frontend] --> API[Backend API]
-  API --> A[Agent loop] --> M[Free AI model]
+  API --> A[Agent loop] --> M[Free AI model via OpenRouter]
   A --> T1[get_assessment_criteria] --> DB[(Remote database)]
   A --> T2[get_submissions] --> DB
   API --> V[Code validation and totals]
   L -- confirms --> T3[save_reviewed_results] --> DB
 ```
 
-## Validation and scoring (Person 4)
-**Principle.** The AI proposes, the code validates, the lecturer decides. Model output is untrusted. Every number that reaches the lecturer or the database is checked or calculated in `backend/app/scoring.py`, which has no network or database dependency and is covered by automated tests.
+## Agent (Section D21 — Person 3)
 
-**Before the model.** `detect_answer_status` marks an answer `blank` (empty, whitespace or punctuation only) or `unassessable` (fewer than 3 letters). Those answers never reach the model. Zeros are proposed and a flag is added. Blank answers cost no quota and cannot be credited by mistake.
+The agent (`backend/app/agent.py`) runs a bounded loop: at most `MAX_MODEL_TURNS=5` model turns, `MAX_TOOL_CALLS=4` tool calls, and `RUN_TIMEOUT_SECONDS=60` wall-clock. It never auto-retries on timeouts or 429s — the OpenAI SDK is configured with `max_retries=0` to avoid burning the 50-request daily free quota.
 
-**After the model.** `validate_model_output` checks every student the model was asked about:
+**Retrieval.** The model calls `get_assessment_criteria` and `get_submissions` by itself. Before the model sees the answers, the agent sanitises them: `detect_answer_status` flags blank or unassessable answers, removes them from the model input, and remembers them for code-side zero-scoring. Each remaining answer is wrapped in a delimited block with a per-run random nonce (`===ANSWER nonce=<nonce> student=<id>===`), so student text never touches the system prompt and cannot act as an instruction.
 
-- Each rubric criterion appears exactly once, with no unknown ids.
-- Each score is a whole number from 0 to that criterion's maximum. Scores are never clamped, because silently turning 3 into 2 would hide a model error and put a number in front of the lecturer that nobody chose. A bad score makes that student invalid instead.
-- The model may only set `complete`, `incomplete` or `unassessable`. `blank` and `needs_manual_grading` belong to the backend.
-- Missing students are marked invalid. Unknown students and results for answers handled in code are dropped and noted in the run log. A duplicated student has every row rejected.
-- Invalid students are retried once, as a batch, for the whole run. Anyone still invalid becomes `needs_manual_grading`: no scores are proposed and the lecturer must enter every criterion before Confirm is enabled. Other students are unaffected.
+**Output.** The model returns JSON (parsed by `parse_model_output`, which strips think blocks, markdown fences, and extracts the first balanced JSON object). Code validates via `scoring.validate_model_output`: scores must be integers in range, quotes must exist in the answer, and `blank`/`needs_manual_grading` can only be set by the backend. A `needs_clarification` response is returned immediately with a question, no tools called.
 
-**Evidence.** `evidence_found` normalises whitespace, case and quote marks, then checks that the quote appears inside the student's answer. An empty quote means "no supporting evidence found", which is not a failure. A quote that is not in the answer is shown as "Quote not found in answer" with a flag. The score is kept, because the quote may be a paraphrase while the mark is right, and the decision belongs to the lecturer.
+**Retry.** One retry per run, shared across unparseable output and invalid students. The corrective message lists the failed student ids and reasons, asks for complete JSON again, and omits tools (data is already in context). Anyone still invalid after the retry becomes `needs_manual_grading` — no scores, flagged for the lecturer.
 
-**Injection.** The prompt tells the model that answers are data. If the model obeys anyway, code is the second layer. An answer containing instruction-like text is flagged, and a result that gives full marks to such an answer is rejected, then retried, then sent to manual grading. This is a heuristic backstop for obvious attacks, not a guarantee (see limitations).
+**Failure switch.** `FORCE_AI_FAILURE=1` creates the run, marks it failed, and returns a quota error with zero provider calls and zero tool calls. Cap exhaustion and timeout produce clear error dicts with `run_id` so the UI can offer a manual retry.
 
-**Lecturer review.** `validate_review` requires every student in the batch exactly once, every criterion exactly once, integer scores in range, and scores for every `needs_manual_grading` student. It returns field-level errors for the 422 response. Totals and percentages (rounded half-up to one decimal) are always calculated by the backend from the rubric maximums. Any total the browser sends is ignored.
+**Provider interface.** `ai_provider.py` exposes `generate(messages, tools, response_format) -> ProviderResponse` and `get_provider()`. OpenRouter uses the `openai` SDK pointed at `https://openrouter.ai/api/v1`; the stub uses a scripted fake for development. Errors map to `AIError("timeout")`, `quota`, or `invalid_output`.
 
-**Atomic saves.** With P2, confirming writes every `reviewed_results` row in one transaction. A failure leaves no partial rows, the unique constraint on submission id refuses a second confirm, and the AI proposal is stored in its own table and never edited.
+**What the model never does.** It never calls `save_reviewed_results` (not in its tool list), never computes totals (computed in code), and its scores are never clamped (invalid scores are rejected, not silently corrected).
 
-## Agent, three tools and prompts (Person 3)
-**Plan used: the base design.** The model chooses the two retrieval tools, `get_assessment_criteria` and `get_submissions`. `save_reviewed_results` is not offered to the model: it runs when the lecturer presses Confirm, after validation. (Organizer answer on whether the model must select the save tool: TODO P5. Plan B is described in the build plan, section 4.)
+## Validation and scoring
 
-**The loop** (`agent.py`). The backend first works out which assessment and batch is meant, from the ids in the request or by matching its text to assessment titles and batch labels. If that is unclear, or the assessment has no rubric or reference answer, the lecturer gets a clarification question and nothing is guessed. Then it creates a run (committed at once, so a failed run still leaves a record) and the model calls the two tools. Every call is logged with the run id. Code checks the ids in each call, so a model that invents an id gets an error back and nothing runs.
+See `docs/design-note-validation.md` (Person 4). Key handoff: `run_grading` returns a list of proposal dicts that `save_proposals` stores — one per submission, with `student_id`, `answer_status`, `scores {cid: int}`, `evidence`, `explanations`, `flags`, `feedback`. Blank/unassessable students get zeros and a flag. Invalid-after-retry students get `needs_manual_grading` with `None` scores and `FLAG_MANUAL`.
 
-**Caps per run.** 4 tool-phase model turns plus one grading call, 4 tool calls, 60 seconds in total. The only extra call is the single retry. Hitting a cap closes the run as failed with a clear message and a retry button. Nothing loops by itself.
+## Three tools
 
-**Grading call.** Blank and too-short answers are removed in code before the model sees anything. The remaining answers go into one call, inside delimited blocks that the prompt calls data, never instructions. The reply is parsed as JSON and handed to `scoring.validate_model_output`, so one bad score rejects only that student. Invalid students get one retry, with the reasons, for those students only. Anyone still invalid becomes `needs_manual_grading`. Proposals are saved in one transaction with `runs.save_proposals`.
-
-**Provider** (`ai_provider.py`). One `generate` function over an OpenAI-compatible chat API. Function calling and JSON output are never mixed in one request. Provider errors become four plain kinds (timeout, quota, invalid output, unavailable) plus `tool_limit` from the agent. No key, URL or stack trace reaches a message. `FORCE_AI_FAILURE=1` makes every call fail with the quota error before any network call.
-
-**Injection.** Layer 1 is the prompt: answers are data and instructions inside them are ignored. Layer 2 is code (`scoring.detect_injection`): instruction-like answers are flagged, and full marks given to one are rejected. The model, its limits and the free-plan facts are in `service-register.md`.
-
-Tools: `get_assessment_criteria`, `get_submissions` (retrieve), `save_reviewed_results` (save, after the lecturer confirms).
+`get_assessment_criteria` and `get_submissions` (retrieval, given to the model). `save_reviewed_results` (save, after the lecturer confirms — NOT given to the model). The agent also uses `catalog()` as injected context (not a fourth tool) to resolve free-text requests.
 
 ## Storage
-TODO (P2)
+
+UUID run ids; proposals stored in `ai_proposals` with `answer_status` restricted to the allowed set by the schema. Tool calls logged in `tool_logs`. `model_requests` counter on `grading_runs` (gap request to P2).
 
 ## Free services
-TODO (see service-register.md)
+
+OpenRouter free models only (IDs ending `:free`). 20 req/min, 50 req/day on non-billing accounts. `DAILY_MODEL_REQUEST_CAP=40` enforced in `limits.py`. Development uses the stub provider; live calls reserved for Gate 0, Gate 2, test cases, and demo.
 
 ## Member responsibilities
-See contribution-note.md. TODO: one line per person.
+
+See `docs/contribution-note.md`.
