@@ -1,3 +1,45 @@
 {
-  "todo": "P5: write the second assessment here (for example list versus tuple in Python) in the same shape as js101.json. Three criteria that do not overlap, three short answers. Its purpose is to make 'which assessment?' a real question."
+  "id": "PY101",
+  "title": "PY101: Lists and tuples in Python",
+  "question": "What are a list and a tuple in Python, and how do they differ?",
+  "reference_answer": "A list is an ordered collection written with square brackets. A tuple is an ordered collection written with parentheses. Lists are mutable, so items can be added, removed or changed. Tuples are immutable, so they cannot change after creation.",
+  "rubric": [
+    {
+      "position": 1,
+      "name": "Defines list and tuple",
+      "max_score": 2,
+      "description": "Covers: both are ordered collections of items.\nMarks: 2 = both described correctly; 1 = only one, or vague; 0 = missing or wrong.\nNot credited here: mutability, syntax."
+    },
+    {
+      "position": 2,
+      "name": "Mutability",
+      "max_score": 3,
+      "description": "Covers: lists can be changed after creation; tuples cannot.\nMarks: 3 = both facts correct and the difference is clear; 2 = one fact correct, the other missing; 1 = vague (e.g. 'tuples are fixed'); 0 = missing or wrong.\nNot credited here: syntax."
+    },
+    {
+      "position": 3,
+      "name": "Syntax",
+      "max_score": 2,
+      "description": "Covers: lists use square brackets; tuples use parentheses.\nMarks: 2 = both correct; 1 = one correct; 0 = none.\nNot credited here: mutability."
+    }
+  ],
+  "batches": [
+    {
+      "label": "PY101-B1",
+      "submissions": [
+        {
+          "student_id": "PY001",
+          "answer": "A list is an ordered collection written with square brackets and it is mutable, so you can add, remove or change items. A tuple is an ordered collection written with parentheses and it is immutable, so it cannot change after it is created."
+        },
+        {
+          "student_id": "PY002",
+          "answer": "A list uses [] and a tuple uses (). Tuples cannot be changed."
+        },
+        {
+          "student_id": "PY003",
+          "answer": "Python is a snake and also a programming language."
+        }
+      ]
+    }
+  ]
 }
