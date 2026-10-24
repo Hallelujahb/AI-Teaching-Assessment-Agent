@@ -184,3 +184,16 @@ body { background: var(--lg-bg); }
   .lg-logo-text { font-size: 32px; }
   .lg-tagline { font-size: 28px; margin-top: 10px; }
 }
+
+/* BIG-LOGO: logo (box + ቀለሜ) far larger than the tagline */
+.lg-brand { padding: 0 clamp(28px, 4.4vw, 64px); }
+.lg-brand-foot { left: clamp(28px, 4.4vw, 64px); }
+.lg-logo { gap: clamp(10px, 1.5vw, 24px); flex-wrap: wrap; }
+.lg-logo-box {
+  width: clamp(72px, 12vw, 190px);
+  height: clamp(72px, 12vw, 190px);
+  border-radius: clamp(16px, 2.6vw, 40px);
+  font-size: clamp(42px, 7vw, 112px);
+}
+.lg-logo-text { font-size: clamp(48px, 9vw, 150px); line-height: 1; }
+.lg-tagline { font-size: clamp(20px, 2vw, 30px); margin-top: clamp(14px, 2vw, 30px); }

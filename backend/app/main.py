@@ -25,6 +25,7 @@ install_limits(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.allowed_origins(),
+    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1):\d+$",   # any local dev port
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type", "Authorization"],
     allow_credentials=False,

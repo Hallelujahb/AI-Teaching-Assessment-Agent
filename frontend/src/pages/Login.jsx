@@ -45,6 +45,7 @@ export default function Login({ onLogin, onRegister, onForgot }) {
       const store = keep ? localStorage : sessionStorage
       store.setItem('qeleme_token', data.token)
       store.setItem('qeleme_user', JSON.stringify(data.user))
+      /*wired*/ window.localStorage.setItem('qeleme_token', data.token)
       if (onLogin) onLogin(data)
       else window.location.assign('/')
     } catch (err) {
