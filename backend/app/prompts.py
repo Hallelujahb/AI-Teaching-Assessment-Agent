@@ -219,6 +219,9 @@ def parse_model_output(text: str | None) -> dict:
         raise AIError("invalid_output", message="The model returned an empty response.")
     cleaned = _THINK.sub("", text)
     cleaned = _FENCE.sub("", cleaned).strip()
+    # Reject top-level JSON arrays — we expect an object.
+    if cleaned.lstrip().startswith("["):
+        raise AIError("invalid_output", message="The model output is a JSON array, not an object.")
     candidates = [cleaned]
     start, end = cleaned.find("{"), cleaned.rfind("}")
     if start != -1 and end > start:

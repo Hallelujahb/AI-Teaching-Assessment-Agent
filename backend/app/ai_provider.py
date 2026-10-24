@@ -156,6 +156,8 @@ def _parse_response(response: Any, model: str | None = None) -> ProviderReply:
         raw_calls.append({"id": tc.id, "type": "function",
                           "function": {"name": tc.function.name, "arguments": raw_args if isinstance(raw_args, str) else "{}"}})
     text = getattr(message, "content", None)
+    if (not text or not str(text).strip()) and not calls:
+        raise AIError("invalid_output") from None
     assistant: dict = {"role": "assistant", "content": text or ""}
     if raw_calls:
         assistant["tool_calls"] = raw_calls

@@ -12,8 +12,8 @@ import copy
 import uuid
 from typing import Any
 
-from .scoring import detect_answer_status, validate_model_output, build_proposals, merge_retry_report
-from .ai_provider import AIError, StubProvider, ToolCall, ProviderReply
+from app.scoring import detect_answer_status, validate_model_output, build_proposals, merge_retry_report
+from app.ai_provider import AIError, StubProvider, ToolCall, ProviderReply
 
 
 # Alias for tests that import ProviderResponse.
@@ -54,7 +54,7 @@ class FakeTools:
         """Return {label, submissions: [{student_id, answer, ...}]}."""
         self.calls.append({"tool": "get_submissions", "args": {"assessment_id": assessment_id, "batch_id": batch_id}})
         subs = copy.deepcopy(list(self._submissions.values()))
-        return {"batch": "B1", "submissions": subs}
+        return {"label": "B1", "submissions": subs}
 
 
 def build_js101_fixture():
