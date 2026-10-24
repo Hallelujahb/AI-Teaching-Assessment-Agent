@@ -1,10 +1,11 @@
-# Gate 0 checklist
+# Gate 0 checklist (record of what actually passed)
 
-Nothing is assumed to work until it is checked in our own accounts. Never add a card or turn on billing.
-
-- [ ] AI provider (P3): key created, `python -m app.check_ai` returns a tool call, model name, rate limit or credit balance and terms noted
-- [ ] Database (P2): free Postgres created with no payment details, reachable from a laptop
-- [ ] Backend host (P2): hello-world FastAPI deployed, answers over HTTPS
-- [ ] Frontend host (P1): Vite hello-world deployed
-- [ ] Model limits (P3): requests per minute and per day known
-- [ ] Organizer question (P5): must the model also select the save tool?
+| Check | Owner | Result | Notes |
+| --- | --- | --- | --- |
+| AI key made with billing off; chosen model answers a function-calling call; limits written down | P3 | TODO | Model, rate limits |
+| Account region and age eligibility for the AI service | P3 | TODO | |
+| Remote database created with no payment details, reachable | P2 | TODO | |
+| Backend host serves HTTPS with no payment details | P2 | TODO | |
+| Frontend host serves a page with no payment details | P1 | TODO | |
+| Every coding assistant is on a free plan | All | TODO | |
+Never add a card or enable billing. Switch services and update the register instead.

@@ -1,6 +1,5 @@
 {
-  "id": "JS101",
-  "title": "Introduction to JavaScript, Question 1",
+  "title": "JS101: Variables in JavaScript",
   "question": "What is a variable in JavaScript, and how do let, const and var differ?",
   "reference_answer": "A variable is a named container that stores a value so a program can use it later. var is function scoped and can be redeclared and reassigned. let is block scoped and can be reassigned but not redeclared in the same scope. const is block scoped and cannot be reassigned or redeclared.",
   "rubric": [
@@ -8,19 +7,19 @@
       "position": 1,
       "name": "Defines a variable",
       "max_score": 2,
-      "description": "Covers: a named place that stores a value for later use. Marks: 2 correct, 1 vague, 0 missing or wrong. Not credited here: anything about var, let or const."
+      "description": "Covers: a named place that stores a value for later use.\nMarks: 2 = correct (named place/container AND stores a value for later use); 1 = vague (e.g. 'stores values' with no idea of a name or later use); 0 = missing or wrong.\nNot credited here: anything about var, let or const."
     },
     {
       "position": 2,
       "name": "Reassignment and redeclaration",
       "max_score": 3,
-      "description": "Covers: which of var, let and const can be reassigned and which can be redeclared. Marks: 3 all three correct, 2 two correct, 1 one correct, 0 none. Not credited here: scope."
+      "description": "Covers: which of var, let and const can be reassigned and which can be redeclared.\nMarks: 3 = all three keywords correct; 2 = two keywords correct; 1 = one keyword correct; 0 = none correct.\nNot credited here: scope."
     },
     {
       "position": 3,
       "name": "Scope",
       "max_score": 3,
-      "description": "Covers: var is function scoped; let and const are block scoped. Marks: 3 both correct, 2 partly correct, 1 one fact, 0 none. Not credited here: reassignment, redeclaration."
+      "description": "Covers: var is function scoped; let and const are block scoped.\nMarks: 3 = both facts correct; 2 = partly correct (e.g. let/const block scoped, var not mentioned or wrong); 1 = one fact only; 0 = none.\nNot credited here: reassignment, redeclaration."
     }
   ],
   "batches": [
