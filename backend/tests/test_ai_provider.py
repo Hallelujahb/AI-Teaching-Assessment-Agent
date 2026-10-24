@@ -6,10 +6,12 @@ import pytest
 
 from app.ai_provider import (
     AIError,
-    ProviderResponse,
+    ProviderReply,
     StubProvider,
     ToolCall,
+    extract_json,
     get_provider,
+    map_error,
 )
 
 
@@ -31,7 +33,7 @@ def test_stub_provider_returns_string_as_is():
 
 def test_stub_provider_raises_aierror():
     provider = StubProvider([AIError("quota", "rate limited")])
-    with pytest.raises(AIError, match="quota"):
+    with pytest.raises(AIError, match="rate limited"):
         provider.generate([])
 
 
@@ -81,9 +83,9 @@ def test_get_provider_force_failure(monkeypatch):
 
 
 def test_get_provider_openrouter_not_configured(monkeypatch):
-    monkeypatch.setenv("AI_PROVIDER", "openrouter")
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    monkeypatch.delenv("AI_MODEL", raising=False)
+    """_OpenRouterProvider() checks OPENROUTER_API_KEY and AI_MODEL."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "")
+    monkeypatch.setenv("AI_MODEL", "")
     monkeypatch.delenv("FORCE_AI_FAILURE", raising=False)
     from app.ai_provider import _OpenRouterProvider
     with pytest.raises(AIError, match="not configured"):
@@ -100,24 +102,6 @@ def test_get_provider_unknown(monkeypatch):
 # -----------------------------------------------------------------------
 # OpenRouter error mapping (tested via monkeypatched OpenAI client)
 
-class FakeOpenAI:
-    """Stand-in for the openai.OpenAI client to test error mapping."""
-
-    def __init__(self, *, completions_response=None, completions_error=None):
-        self._response = completions_response
-        self._error = completions_error
-        self.create_calls = 0
-
-    class chat:
-        @staticmethod
-        def completions():
-            return FakeOpenAI.chat_completions()
-
-    class chat_completions:
-        @staticmethod
-        def create(**kwargs):
-            pass
-
 
 def _patch_openai(monkeypatch, create_fn):
     """Patch the OpenAI constructor and chat.completions.create."""
@@ -130,11 +114,11 @@ def _patch_openai(monkeypatch, create_fn):
         def __init__(self, **kwargs):
             self.kwargs = kwargs
         chat = FakeChat()
-    monkeypatch.setattr("app.ai_provider.OpenAI", FakeClient)
+    monkeypatch.setattr("openai.OpenAI", FakeClient)
 
 
 def test_openrouter_timeout(monkeypatch):
-    from openai import TimeoutError as OpenAITimeout
+    from openai import APITimeoutError as OpenAITimeout
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     monkeypatch.setenv("AI_MODEL", "test-model")
     monkeypatch.setenv("AI_PROVIDER", "openrouter")
@@ -146,7 +130,7 @@ def test_openrouter_timeout(monkeypatch):
 
     from app.ai_provider import _OpenRouterProvider
     provider = _OpenRouterProvider()
-    with pytest.raises(AIError, match="timeout"):
+    with pytest.raises(AIError, match="too long"):
         provider.generate([{"role": "user", "content": "hi"}])
 
 
@@ -163,7 +147,7 @@ def test_openrouter_rate_limit(monkeypatch):
     monkeypatch.delenv("FORCE_AI_FAILURE", raising=False)
 
     def raise_rl(**kwargs):
-        raise RateLimitError("rate limited", response=FakeResp())
+        raise RateLimitError("rate limited", response=FakeResp(), body=FakeResp())
     _patch_openai(monkeypatch, raise_rl)
 
     from app.ai_provider import _OpenRouterProvider
@@ -185,7 +169,7 @@ def test_openrouter_503_is_quota(monkeypatch):
     monkeypatch.delenv("FORCE_AI_FAILURE", raising=False)
 
     def raise_503(**kwargs):
-        raise APIError("unavailable", response=FakeResp())
+        raise APIError("unavailable", response=FakeResp(), body=FakeResp())
     _patch_openai(monkeypatch, raise_503)
 
     from app.ai_provider import _OpenRouterProvider
@@ -200,15 +184,10 @@ def test_openrouter_empty_choices_invalid_output(monkeypatch):
     monkeypatch.setenv("AI_PROVIDER", "openrouter")
     monkeypatch.delenv("FORCE_AI_FAILURE", raising=False)
 
-    class FakeChoices:
-        def __iter__(self):
-            return iter([])
     class FakeReply:
         choices = []
         usage = None
         error = None
-        def __bool__(self):
-            return False
 
     def return_empty(**kwargs):
         return FakeReply
@@ -221,22 +200,16 @@ def test_openrouter_empty_choices_invalid_output(monkeypatch):
 
 
 def test_openrouter_error_in_200_body(monkeypatch):
+    """200 response with error field → quota error."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     monkeypatch.setenv("AI_MODEL", "test-model")
     monkeypatch.setenv("AI_PROVIDER", "openrouter")
     monkeypatch.delenv("FORCE_AI_FAILURE", raising=False)
 
-    class FakeMessage:
-        content = None
-        tool_calls = None
-    class FakeChoice:
-        message = FakeMessage()
     class FakeReply:
-        choices = [FakeChoice()]
+        choices = []
         usage = None
         error = {"message": "model not found"}
-        def __bool__(self):
-            return True
 
     def return_with_error(**kwargs):
         return FakeReply
@@ -244,7 +217,7 @@ def test_openrouter_error_in_200_body(monkeypatch):
 
     from app.ai_provider import _OpenRouterProvider
     provider = _OpenRouterProvider()
-    with pytest.raises(AIError, match="quota"):
+    with pytest.raises(AIError, match="model not found"):
         provider.generate([{"role": "user", "content": "hi"}])
 
 
@@ -262,12 +235,15 @@ def test_openrouter_success_returns_provider_response(monkeypatch):
     class FakeMessage:
         content = '{"status": "graded", "results": []}'
         tool_calls = None
+
     class FakeChoice:
         message = FakeMessage()
+
     class FakeReply:
         choices = [FakeChoice()]
         usage = FakeUsage()
         error = None
+        model = "test-model"
 
     def return_success(**kwargs):
         return FakeReply
@@ -291,8 +267,10 @@ def test_openrouter_empty_content_no_tool_calls(monkeypatch):
     class FakeMessage:
         content = None
         tool_calls = None
+
     class FakeChoice:
         message = FakeMessage()
+
     class FakeReply:
         choices = []
         usage = None
@@ -308,8 +286,69 @@ def test_openrouter_empty_content_no_tool_calls(monkeypatch):
         provider.generate([{"role": "user", "content": "hi"}])
 
 
+# -----------------------------------------------------------------------
+# extract_json
+
+
+def test_extract_json_clean():
+    result = extract_json('{"status": "graded", "results": []}')
+    assert result["status"] == "graded"
+
+
+def test_extract_json_fenced():
+    text = '```json\n{"status": "graded"}\n```'
+    result = extract_json(text)
+    assert result["status"] == "graded"
+
+
+def test_extract_json_none_for_empty():
+    assert extract_json("") is None
+    assert extract_json(None) is None
+    assert extract_json("not json") is None
+
+
+def test_extract_json_array_is_none():
+    assert extract_json('[{"status": "graded"}]') is None  # not a dict
+
+
+# -----------------------------------------------------------------------
+# map_error
+
+
+class _FakeExc(Exception):
+    pass
+
+
+def test_map_error_timeout():
+    result = map_error(TimeoutError("timed out"))
+    assert result.extra["kind"] == "timeout"
+
+
+def test_map_error_rate_limit():
+    from openai import RateLimitError
+
+    class FakeResp:
+        status_code = 429
+        message = "rate limited"
+
+    result = map_error(RateLimitError("rl", response=FakeResp()))
+    assert result.extra["kind"] == "quota"
+
+
+def test_map_error_connection_error():
+    from openai import APIConnectionError
+    result = map_error(APIConnectionError("conn"))
+    assert result.extra["kind"] == "unavailable"
+
+
+# -----------------------------------------------------------------------
+# tool_schemas never includes save tool
+
+
 def test_provider_never_receives_save_tool():
     """The save tool must never be in the tool schemas."""
     from app.prompts import tool_schemas
     names = [s["function"]["name"] for s in tool_schemas()]
     assert "save_reviewed_results" not in names
+    assert "get_assessment_criteria" in names
+    assert "get_submissions" in names

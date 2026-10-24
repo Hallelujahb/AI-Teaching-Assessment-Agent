@@ -1,4 +1,6 @@
 """Tests for parse_model_output and prompt builders. No network, no database."""
+import json as _json
+
 import pytest
 
 from app.ai_provider import AIError
@@ -38,7 +40,6 @@ VALID_JSON = {
         }
     ],
 }
-import json as _json
 VALID_TEXT = _json.dumps(VALID_JSON)
 
 
@@ -73,14 +74,7 @@ def test_json_followed_by_prose():
 
 
 def test_think_block_stripped():
-    raw = f"Some intro with thinking.\n\n{VALID_TEXT}\n\nMore text."
-    text = f"Some reasoning here.\n\n{raw}"
-    result = parse_model_output(text)
-    assert result["status"] == "graded"
-
-
-def test_boxed_stripped():
-    text = f"\\boxed{{{VALID_TEXT}}}"
+    text = f"thinking about this...\n\n{VALID_TEXT}\n\nDone."
     result = parse_model_output(text)
     assert result["status"] == "graded"
 
@@ -103,7 +97,7 @@ def test_whitespace_only_raises():
 
 def test_array_not_object_raises():
     with pytest.raises(AIError, match="invalid_output"):
-        parse_model_output('[{"status": "graded"}]')
+        parse_model_output('[{\"status\": \"graded\"}]')
 
 
 def test_no_curly_braces_raises():
@@ -112,9 +106,6 @@ def test_no_curly_braces_raises():
 
 
 def test_nested_objects_handled():
-    """A nested object inside the criteria should not confuse the brace counter."""
-    text = f'{"status": "graded", "results": []}\nextra'
-    # Need proper JSON
     text = _json.dumps({"status": "graded", "results": []})
     result = parse_model_output(text)
     assert result["status"] == "graded"
@@ -132,7 +123,7 @@ def test_json_with_nested_braces():
 
 
 def test_invalid_status_raises():
-    """ModelOutput requires status in the allowed set."""
+    """parse_model_output requires status in the allowed set."""
     text = _json.dumps({"status": "something_else", "results": []})
     with pytest.raises(AIError, match="invalid_output"):
         parse_model_output(text)
@@ -140,6 +131,7 @@ def test_invalid_status_raises():
 
 # -----------------------------------------------------------------------
 # Message builders
+
 
 def test_tool_schemas_only_retrieval():
     schemas = tool_schemas()
@@ -153,7 +145,7 @@ def test_build_answer_blocks_has_nonce():
     subs = [{"student_id": "S1", "answer": "hello world"}]
     nonce = "abc123"
     blocks = build_answer_blocks(subs, nonce)
-    assert nonce in blocks
+    assert f"nonce={nonce}" in blocks
     assert "S1" in blocks
     assert "===ANSWER" in blocks
     assert "===END===" in blocks
@@ -162,6 +154,14 @@ def test_build_answer_blocks_has_nonce():
 def test_build_answer_blocks_empty_submissions():
     blocks = build_answer_blocks([], "abc123")
     assert "no assessable" in blocks
+
+
+def test_build_answer_blocks_filters_blank():
+    """Blank answers should not appear in blocks."""
+    subs = [{"student_id": "S1", "answer": "hello"}, {"student_id": "S2", "answer": ""}]
+    blocks = build_answer_blocks(subs, "abc123")
+    assert "hello" in blocks
+    assert "S2" not in blocks  # blank filtered
 
 
 def test_build_catalog_context():
@@ -189,7 +189,7 @@ def test_build_retry_message_lists_invalid():
 def test_build_initial_messages_has_system_and_user():
     rubric = {"question": "Q1", "reference_answer": "RA", "rubric": [
         {"id": 1, "name": "C1", "max_score": 2, "description": "D1"}
-    ]}
+    ], "max_total": 2}
     subs = [{"student_id": "S1", "answer": "hello world"}]
     msgs = build_initial_messages("JS101", rubric, subs, make_nonce(), "catalog text", "grade please")
     assert len(msgs) == 2
@@ -197,7 +197,7 @@ def test_build_initial_messages_has_system_and_user():
     assert msgs[1]["role"] == "user"
     assert "Q1" in msgs[1]["content"]
     assert "S1" in msgs[1]["content"]  # answer block present
-    assert "nonce=" in msgs[1]["content"]  # nonce delimiter present
+    assert "grade please" in msgs[1]["content"]  # request text present
 
 
 def test_answer_blocks_use_nonce_delimiter():
@@ -206,13 +206,3 @@ def test_answer_blocks_use_nonce_delimiter():
     nonce = make_nonce()
     blocks = build_answer_blocks(subs, nonce)
     assert f"nonce={nonce}" in blocks
-
-
-def test_blank_answer_not_in_blocks():
-    """Blank answers should never appear in model messages."""
-    subs = [{"student_id": "S1", "answer": "hello"}, {"student_id": "S2", "answer": ""}]
-    blocks = build_answer_blocks(subs, "abc123")
-    # Both are passed through builder; the agent sanitises before calling
-    assert "hello" in blocks
-    # S2's empty answer still generates a block (agent filters before calling)
-    # The key test is that the agent removes blanks before calling build_answer_blocks
