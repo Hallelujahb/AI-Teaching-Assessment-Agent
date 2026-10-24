@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-TABLES = ["reviewed_results", "ai_proposals", "tool_logs", "grading_runs",
+TABLES = ["users", "reviewed_results", "ai_proposals", "tool_logs", "grading_runs",
           "submissions", "submission_batches", "rubric_criteria", "assessments"]
 
 

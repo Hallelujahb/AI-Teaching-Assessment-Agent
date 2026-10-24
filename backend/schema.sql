@@ -89,3 +89,19 @@ CREATE TABLE IF NOT EXISTS reviewed_results (
   feedback TEXT NOT NULL DEFAULT '',
   approved_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Accounts and roles (superadmin, lecturer, student). A student account is linked to
+-- submissions by student_id (for example ST001).
+CREATE TABLE IF NOT EXISTS users (
+  id SERIAL PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('superadmin', 'lecturer', 'student')),
+  student_id TEXT,
+  password_hash TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Sign-up requests wait as 'pending' until approved. Existing accounts stay 'active'.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('pending', 'active'));
+-- One account per student id, so nobody can claim an id that is already taken.
+CREATE UNIQUE INDEX IF NOT EXISTS one_account_per_student ON users (student_id) WHERE role = 'student' AND student_id IS NOT NULL;

@@ -49,3 +49,6 @@ OpenRouter free models only (IDs ending `:free`). 20 req/min, 50 req/day on non-
 ## Member responsibilities
 
 See `docs/contribution-note.md`.
+
+## Access control
+Three roles. The **super admin** creates lecturer and student accounts and sees platform totals. A **lecturer** (and the super admin) can grade, review and reopen results. A **student** can only read their own confirmed results, matched by the student id on their account. Sign-in returns a signed token (HMAC-SHA256, 12 hours); the role is read from the database on every request, and the checks live in `backend/app/auth.py` and `main.py`, never in the browser alone. Passwords are stored as salted PBKDF2 hashes.

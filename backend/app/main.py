@@ -1,36 +1,38 @@
-"""FastAPI app: CORS from ALLOWED_ORIGINS, routers, error handlers, limits.
+"""FastAPI app: CORS from ALLOWED_ORIGINS, routers, error handlers, limits, role checks.
 
 Run locally:  uvicorn app.main:app --reload --port 8000   (from backend/)
-Only P2 edits this file. limits.py exposes one function (install_limits) that is called here.
-routes/export.py is added after Gate 3 if there is time.
+Access control: lecturer and super admin reach grading, review and results routes.
+Students reach only /api/me/results. Only the super admin reaches /api/admin/*.
 
 Owner: P2
-Plan: sections 7 and 8
 """
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import config
+from .auth import require
 from .errors import install_error_handlers
 from .limits import install_limits
-from .routes import assessments, batches, grading, health, results, review, runs
+from .routes import admin, approvals, assessments, auth, batches, dashboard, grading, health, me, results, review, runs
 
 app = FastAPI(title="Qeleme API")
 
 install_error_handlers(app)
 install_limits(app)
 
-# Added last so it is the outermost layer and also covers error responses (413, 429, ...).
-# Exact origins only, no wildcard, no cookies.
+# Added last so it is the outermost layer and also covers error responses (401, 413, 429, ...).
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.allowed_origins(),
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Content-Type", "Authorization"],
     allow_credentials=False,
 )
 
-for module in (health, assessments, batches, grading, runs, review, results):
+staff = [Depends(require("lecturer", "superadmin"))]
+for module in (assessments, batches, grading, runs, review, results, dashboard, approvals):
+    app.include_router(module.router, dependencies=staff)
+for module in (health, auth, me, admin):
     app.include_router(module.router)
 
 
