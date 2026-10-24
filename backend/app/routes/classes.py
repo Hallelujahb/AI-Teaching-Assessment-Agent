@@ -59,8 +59,6 @@ def _clean(conn, body: dict) -> tuple[str, list[dict]]:
     codes = clean_codes(body.get("student_ids"))
     if not codes:
         errors["student_ids"] = "Choose at least one student"
-    elif len(codes) > config.MAX_ANSWERS_PER_BATCH:
-        errors["student_ids"] = f"A class can have at most {config.MAX_ANSWERS_PER_BATCH} students"
     if errors:
         raise Unprocessable("Please fix the highlighted fields.", errors)
     return name, students_by_code(conn, codes)

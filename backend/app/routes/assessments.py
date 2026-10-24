@@ -13,7 +13,9 @@ from ..errors import Conflict, NotFound, Unprocessable
 from ..limits import limiter
 
 router = APIRouter()
+MIN_CRITERIA = 3
 MAX_CRITERIA = 8
+MAX_CRITERION_SCORE = 1000   # sanity ceiling only; the lecturer picks the real value
 
 LIST_SQL = """
 SELECT a.id, a.title, a.question,
@@ -48,8 +50,8 @@ def _clean(body: dict) -> dict:
     if not reference or len(reference) > 2000:
         errors["reference_answer"] = "Enter a reference answer (up to 2000 characters)"
     rubric = body.get("rubric")
-    if not isinstance(rubric, list) or not 1 <= len(rubric) <= MAX_CRITERIA:
-        errors["rubric"] = f"Add between 1 and {MAX_CRITERIA} criteria"
+    if not isinstance(rubric, list) or not MIN_CRITERIA <= len(rubric) <= MAX_CRITERIA:
+        errors["rubric"] = f"Add at least {MIN_CRITERIA} criteria (up to {MAX_CRITERIA})"
     else:
         for i, c in enumerate(rubric):
             c = c if isinstance(c, dict) else {}
@@ -58,11 +60,9 @@ def _clean(body: dict) -> dict:
                 errors[f"rubric[{i}].name"] = "Name the criterion (up to 80 characters)"
             if not desc or len(desc) > 600:
                 errors[f"rubric[{i}].description"] = "Describe what earns marks (up to 600 characters)"
-            if mx is None or not 1 <= mx <= 20:
-                errors[f"rubric[{i}].max_score"] = "Use a whole number from 1 to 20"
+            if mx is None or not 1 <= mx <= MAX_CRITERION_SCORE:
+                errors[f"rubric[{i}].max_score"] = f"Use a whole number from 1 to {MAX_CRITERION_SCORE}"
             rows.append((i + 1, name, desc, mx))
-        if not errors and sum(r[3] for r in rows) > 100:
-            errors["rubric"] = "The total marks cannot be more than 100"
     if errors:
         raise Unprocessable("Please fix the highlighted fields.", errors)
     return {"title": title, "question": question, "reference": reference, "rows": rows}
@@ -137,7 +137,13 @@ def delete_assessment(assessment_id: int):
 
 
 @router.get("/api/students")
-def list_students():
+def list_students(q: str = "", limit: int = 200):
+    """Active students. ?q= searches id, name and email."""
+    q = q.strip()
+    like = f"%{q}%"
+    limit = max(1, min(limit, 1000))
     with get_conn() as conn:
-        return conn.execute("SELECT student_id, name FROM users WHERE role='student' AND status='active' "
-                            "AND student_id IS NOT NULL ORDER BY student_id").fetchall()
+        return conn.execute(
+            "SELECT student_id, name, email FROM users WHERE role='student' AND status='active' "
+            "AND student_id IS NOT NULL AND (%s::text = '' OR student_id ILIKE %s OR name ILIKE %s OR email ILIKE %s) "
+            "ORDER BY student_id LIMIT %s", (q, like, like, like, limit)).fetchall()

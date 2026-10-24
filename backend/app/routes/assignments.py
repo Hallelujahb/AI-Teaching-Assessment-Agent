@@ -73,9 +73,6 @@ def assign(request: Request, assessment_id: int, body: dict = Body(...), user: d
                 people[r["id"]] = r
             if not people:
                 raise Unprocessable("Choose a class or at least one student.", {"students": "Nobody is selected"})
-            if len(people) > config.MAX_ANSWERS_PER_BATCH:
-                raise Unprocessable("Too many students.",
-                                    {"students": f"An assignment can have at most {config.MAX_ANSWERS_PER_BATCH} students"})
             count = conn.execute("SELECT count(*) AS n FROM submission_batches WHERE assessment_id=%s",
                                  (assessment_id,)).fetchone()["n"]
             if count >= config.MAX_BATCHES_PER_ASSESSMENT:
