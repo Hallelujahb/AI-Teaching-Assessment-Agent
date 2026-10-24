@@ -105,3 +105,6 @@ CREATE TABLE IF NOT EXISTS users (
 ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('pending', 'active'));
 -- One account per student id, so nobody can claim an id that is already taken.
 CREATE UNIQUE INDEX IF NOT EXISTS one_account_per_student ON users (student_id) WHERE role = 'student' AND student_id IS NOT NULL;
+-- Ids are issued by the system: students get ST001, ST002 ... in student_id; lecturers get LT001 ... in staff_id.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_id TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS one_account_per_staff ON users (staff_id) WHERE staff_id IS NOT NULL;

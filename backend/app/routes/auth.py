@@ -1,16 +1,16 @@
 """Sign in (with the chosen role), sign-up requests, and the signed-in user.
 
-New lecturer and student accounts start as 'pending'. A super admin approves lecturers;
-a lecturer or super admin approves students (see routes/approvals.py).
+New lecturer and student accounts start as 'pending' and are issued an id at once.
+A super admin approves lecturers; a lecturer or super admin approves students.
 
 Owner: P2
 """
-import psycopg
 from fastapi import APIRouter, Body, Depends, Request
 
+from ..accounts import create_account
 from ..auth import Forbidden, Unauthorized, check_password, current_user, hash_password, make_token, public
 from ..db import get_conn
-from ..errors import Conflict, Unprocessable
+from ..errors import Unprocessable
 from ..limits import limiter
 
 router = APIRouter()
@@ -42,7 +42,6 @@ def register(request: Request, body: dict = Body(...)):
     name = str(body.get("name") or "").strip()
     role = body.get("role")
     password = str(body.get("password") or "")
-    student_id = str(body.get("student_id") or "").strip() or None
     errors = {}
     if "@" not in email:
         errors["email"] = "Enter a valid email"
@@ -52,23 +51,11 @@ def register(request: Request, body: dict = Body(...)):
         errors["role"] = "Choose student or lecturer"
     if len(password) < 8:
         errors["password"] = "Use at least 8 characters"
-    if role == "student" and not student_id:
-        errors["student_id"] = "Enter the student id used on your answers (for example ST001)"
     if errors:
         raise Unprocessable("Please fix the highlighted fields.", errors)
-    try:
-        with get_conn() as conn:
-            if conn.execute("SELECT 1 FROM users WHERE email=%s", (email,)).fetchone():
-                raise Conflict("An account with this email already exists.", {"email": "Already used"})
-            if role == "student" and conn.execute("SELECT 1 FROM users WHERE role='student' AND student_id=%s", (student_id,)).fetchone():
-                raise Conflict("This student id already has an account. If it is yours, ask your lecturer.", {"student_id": "Already has an account"})
-            conn.execute(
-                "INSERT INTO users (email, name, role, student_id, password_hash, status) VALUES (%s,%s,%s,%s,%s,'pending')",
-                (email, name, role, student_id if role == "student" else None, hash_password(password)))
-    except psycopg.errors.UniqueViolation:
-        raise Conflict("An account with these details already exists.")
+    create_account(email, name, role, hash_password(password), "pending")
     who = "A super admin" if role == "lecturer" else "A lecturer"
-    return {"status": "pending", "message": f"Request sent. {who} will review it before you can sign in."}
+    return {"status": "pending", "message": f"Request sent. {who} will review it. Your id is issued when you are approved and signed in."}
 
 
 @router.get("/api/auth/me")
